@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">FitTrack</string>
+    <string name="widget_description">显示今日训练状态和本周进度</string>
+</resources>

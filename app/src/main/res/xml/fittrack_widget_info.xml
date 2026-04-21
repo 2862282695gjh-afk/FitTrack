@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:minWidth="110dp"
+    android:minHeight="40dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="1"
+    android:maxResizeWidth="250dp"
+    android:maxResizeHeight="110dp"
+    android:previewImage="@drawable/ic_launcher_foreground"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_description"
+    android:updatePeriodMillis="900000" />
+
+<!--
+    updatePeriodMillis: 900000ms = 15 minutes
+    minWidth: 110dp, minHeight: 40dp = 2x1 cells (紧凑型)
+    maxResizeWidth: 250dp, maxResizeHeight: 110dp = 最大 4x2 cells
+-->
