@@ -49,7 +49,7 @@ import com.fittrack.ui.viewmodel.ChatMessage
 import com.fittrack.ui.viewmodel.ChatViewModel
 import com.fittrack.ui.components.MarkdownText
 import com.fittrack.ui.navigation.MessageBubbleEnter
-import com.fittrack.ui.navigation.listItemExit
+import com.fittrack.ui.navigation.ListItemExit
 import kotlinx.coroutines.launch
 
 /**
@@ -177,7 +177,7 @@ fun ChatScreen(
                 AnimatedVisibility(
                     visible = showSessionList,
                     enter = MessageBubbleEnter,
-                    exit = listItemExit
+                    exit = ListItemExit
                 ) {
                     SessionHistoryList(
                         sessions = sessions,
@@ -688,7 +688,7 @@ fun MessageInput(
                         AnimatedVisibility(
                             visible = text.isNotBlank(),
                             enter = MessageBubbleEnter,
-                            exit = listItemExit
+                            exit = ListItemExit
                         ) {
                             IconButton(
                                 onClick = { onTextChange("") },

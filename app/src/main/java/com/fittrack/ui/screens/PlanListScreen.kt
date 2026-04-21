@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.fittrack.data.entity.WorkoutPlan
 import com.fittrack.ui.navigation.STAGGER_DELAY
 import com.fittrack.ui.navigation.listItemEnter
-import com.fittrack.ui.navigation.listItemExit
+import com.fittrack.ui.navigation.ListItemExit
 import com.fittrack.ui.viewmodel.FitTrackViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -118,7 +118,7 @@ fun PlanListScreen(
                     AnimatedVisibility(
                         visibleState = listVisible,
                         enter = listItemEnter(delayMillis = index * STAGGER_DELAY),
-                        exit = listItemExit
+                        exit = ListItemExit
                     ) {
                         PlanListItem(
                             plan = plan,

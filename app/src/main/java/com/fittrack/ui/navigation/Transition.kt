@@ -2,7 +2,6 @@ package com.fittrack.ui.navigation
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.Spring.Companion.DampingRatioNoBouncy
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 
@@ -17,42 +16,43 @@ import androidx.compose.animation.core.tween
 
 // ── 语义化 Spring 配置 ───────────────────────────────────────
 // 按使用场景分层，各 Screen 必须引用这些常量，禁止内联硬编码。
+// 注意：slide 动画的泛型为 IntOffset，scale/fade 动画的泛型为 Float。
 
-/** 页面转场滑动 spring：中等弹性，自然回弹 */
+/** 页面转场 spring：中等弹性，自然回弹 */
 object TransitionSpring {
-    val slide = SpringSpec<Float>(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow)
-    val fade = SpringSpec<Float>(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)
-    val scale = SpringSpec<Float>(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium)
-    val exitSlide = SpringSpec<Float>(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium)
-    val exitFade = SpringSpec<Float>(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium)
+    val slide = spring<IntOffset>(dampingRatio = 0.65f, stiffness = Spring.StiffnessMediumLow)
+    val fade = spring<Float>(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)
+    val scale = spring<Float>(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium)
+    val exitSlide = spring<IntOffset>(dampingRatio = 0.7f, stiffness = Spring.StiffnessMedium)
+    val exitFade = spring<Float>(dampingRatio = 0.75f, stiffness = Spring.StiffnessMedium)
 }
 
 /** 列表/组件级动画 spring */
 object ListSpring {
-    val slide = SpringSpec<Float>(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)
-    val fade = SpringSpec<Float>(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)
-    val scale = SpringSpec<Float>(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium)
-    val exit = SpringSpec<Float>(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium)
+    val slide = spring<IntOffset>(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)
+    val fade = spring<Float>(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)
+    val scale = spring<Float>(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium)
+    val exit = spring<IntOffset>(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium)
 }
 
 /** 按钮点击微交互 spring：快速弹回，手感干脆 */
 object ButtonSpring {
-    val press = SpringSpec<Float>(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium)
+    val press = spring<Float>(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium)
 }
 
 /** 图标/小元素按下 spring：更有弹性的手感 */
 object IconSpring {
-    val press = SpringSpec<Float>(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium)
+    val press = spring<Float>(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium)
 }
 
 /** 庆祝特效 spring：低阻尼，可见回弹 1~2 次 */
 object CelebratorySpring {
-    val bounce = SpringSpec<Float>(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium)
+    val bounce = spring<Float>(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium)
 }
 
 /** 进度条/数值动画 spring */
 object ProgressSpring {
-    val animate = SpringSpec<Float>(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow)
+    val animate = spring<Float>(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow)
 }
 
 // ── 时长常量 ────────────────────────────────────────────────
@@ -120,7 +120,7 @@ val ExitDown: ExitTransition =
 
 // ── 组件级动画：用于 AnimatedVisibility 等 ────────────────
 
-/** 列表项入场：从下方滑入 + 淡入 + 弹性缩放 */
+/** 列表项入场：从下方滑入 + 淡入 + 弹性缩放（支持交错延迟） */
 fun listItemEnter(delayMillis: Int = 0): EnterTransition =
     slideInVertically(
         initialOffsetY = { fullHeight -> (fullHeight * 0.15).toInt() },
@@ -130,17 +130,25 @@ fun listItemEnter(delayMillis: Int = 0): EnterTransition =
         initialAlpha = 0.6f
     ) + scaleIn(
         initialScale = 0.9f,
-        animationSpec = ListSpring.scale,
-        delayMillis = delayMillis.toLong()
+        animationSpec = tween(
+            durationMillis = 350,
+            delayMillis = delayMillis,
+            easing = androidx.compose.animation.core.FastOutSlowInEasing
+        )
     )
+
+object ListExitSpring {
+    val slide = spring<IntOffset>(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium)
+    val fade = spring<Float>(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium)
+}
 
 /** 列表项退场：向上滑出 + 淡出 */
 val ListItemExit: ExitTransition =
     slideOutVertically(
         targetOffsetY = { fullHeight -> -(fullHeight * 0.1).toInt() },
-        animationSpec = ListSpring.exit
-    ) + fadeOut(animationSpec = ListSpring.exit) +
-    scaleOut(targetScale = 0.95f, animationSpec = ListSpring.exit)
+        animationSpec = ListExitSpring.slide
+    ) + fadeOut(animationSpec = ListExitSpring.fade) +
+    scaleOut(targetScale = 0.95f, animationSpec = ListExitSpring.fade)
 
 /** 消息气泡入场：从底部滑入 + 弹性缩放 */
 val MessageBubbleEnter: EnterTransition =
@@ -152,7 +160,7 @@ val MessageBubbleEnter: EnterTransition =
         initialAlpha = 0.5f
     ) + scaleIn(
         initialScale = 0.85f,
-        animationSpec = SpringSpec<Float>(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium)
+        animationSpec = spring<Float>(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium)
     )
 
 /** 庆祝动画 enter：弹性缩放，可见回弹 1~2 次 */
