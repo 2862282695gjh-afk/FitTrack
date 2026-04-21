@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.fittrack.data.db.FitTrackDatabase
 import com.fittrack.data.repository.FitTrackRepository
+import com.fittrack.data.repository.UserProfileRepository
 import com.fittrack.data.storage.SettingsManager
 import com.fittrack.data.api.QwenRepository
 import com.fittrack.ui.screens.AddPlanScreen
@@ -49,12 +50,13 @@ fun FitTrackNavHost(
             workoutPlanDao = database.workoutPlanDao(),
             exerciseDao = database.exerciseDao(),
             workoutRecordDao = database.workoutRecordDao(),
-            exerciseRecordDao = database.exerciseRecordDao(),
-            userProfileDao = database.userProfileDao()
+            exerciseRecordDao = database.exerciseRecordDao()
         )
     }
 
     val settingsManager = SettingsManager.getInstance(context)
+    val userProfileRepository = remember { UserProfileRepository(database.userProfileDao(), settingsManager) }
+
     val settingsViewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.Factory(settingsManager)
     )
@@ -231,7 +233,7 @@ fun FitTrackNavHost(
             popExitTransition = { ExitBackward }
         ) {
             val profileViewModel: ProfileViewModel = viewModel(
-                factory = ProfileViewModel.Factory(repository, context)
+                factory = ProfileViewModel.Factory(userProfileRepository, context)
             )
             ProfileScreen(
                 viewModel = profileViewModel,
@@ -247,7 +249,7 @@ fun FitTrackNavHost(
             popExitTransition = { ExitBackward }
         ) {
             val chatViewModel: ChatViewModel = viewModel(
-                factory = ChatViewModel.Factory(qwenRepository, repository, database.chatDao())
+                factory = ChatViewModel.Factory(qwenRepository, repository, userProfileRepository, database.chatDao())
             )
             ChatScreen(
                 viewModel = chatViewModel,

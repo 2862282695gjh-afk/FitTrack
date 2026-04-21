@@ -19,6 +19,7 @@ import com.fittrack.data.entity.UserProfile
 import com.fittrack.data.entity.WorkoutPlan
 import com.fittrack.data.entity.WorkoutRecord
 import com.fittrack.data.repository.FitTrackRepository
+import com.fittrack.data.repository.UserProfileRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,6 +57,7 @@ data class ChatMessage(
 class ChatViewModel(
     private val qwenRepository: QwenRepository,
     private val fitTrackRepository: FitTrackRepository,
+    private val userProfileRepository: UserProfileRepository,
     private val chatDao: ChatDao
 ) : ViewModel() {
 
@@ -278,7 +280,7 @@ class ChatViewModel(
      */
     private fun loadUserProfile() {
         viewModelScope.launch {
-            fitTrackRepository.getProfile()?.collect { profile ->
+            userProfileRepository.getProfileFlow().collect { profile ->
                 _userProfile.value = profile
             }
         }
@@ -1025,11 +1027,12 @@ class ChatViewModel(
         fun Factory(
             qwenRepository: QwenRepository,
             fitTrackRepository: FitTrackRepository,
+            userProfileRepository: UserProfileRepository,
             chatDao: ChatDao
         ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return ChatViewModel(qwenRepository, fitTrackRepository, chatDao) as T
+                return ChatViewModel(qwenRepository, fitTrackRepository, userProfileRepository, chatDao) as T
             }
         }
     }

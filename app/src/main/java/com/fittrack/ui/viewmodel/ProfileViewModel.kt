@@ -14,7 +14,7 @@ import com.fittrack.data.api.UserBodyStats
 import com.fittrack.data.entity.BodyMeasurement
 import com.fittrack.data.entity.UserProfile
 import com.fittrack.data.entity.WeightRecord
-import com.fittrack.data.repository.FitTrackRepository
+import com.fittrack.data.repository.UserProfileRepository
 import com.fittrack.data.storage.SettingsManager
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -100,7 +100,7 @@ data class ProfileUiState(
 )
 
 class ProfileViewModel(
-    private val repository: FitTrackRepository,
+    private val repository: UserProfileRepository,
     private val context: Context
 ) : ViewModel() {
 
@@ -108,19 +108,16 @@ class ProfileViewModel(
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
     // 用户档案
-    val profile: StateFlow<UserProfile?> = repository.getProfile()
-        ?.stateIn(viewModelScope, SharingStarted.Lazily, null)
-        ?: MutableStateFlow(null)
+    val profile: StateFlow<UserProfile?> = repository.getProfileFlow()
+        .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
     // 最近体重记录
     val recentWeights: StateFlow<List<WeightRecord>> = repository.getRecentWeightRecords(30)
-        ?.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-        ?: MutableStateFlow(emptyList())
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     // 最近测量记录
     val recentMeasurements: StateFlow<List<BodyMeasurement>> = repository.getRecentMeasurements(10)
-        ?.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-        ?: MutableStateFlow(emptyList())
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     init {
         loadProfile()
@@ -132,7 +129,7 @@ class ProfileViewModel(
     private fun loadProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            val profile = repository.getProfileOnce()
+            val profile = repository.getProfile()
             _uiState.update {
                 it.copy(
                     isLoading = false,
@@ -163,7 +160,7 @@ class ProfileViewModel(
                 repository.saveProfile(profile)
 
                 // 如果有新照片，保存照片路径
-                val savedProfile = repository.getProfileOnce()
+                val savedProfile = repository.getProfile()
                 if (savedProfile != null) {
                     val frontPath = currentState.frontPhotoUri?.let { savePhoto(it, "front_${savedProfile.id}") }
                         ?: savedProfile.frontPhotoPath
@@ -176,7 +173,7 @@ class ProfileViewModel(
                         sidePath != savedProfile.sidePhotoPath ||
                         backPath != savedProfile.backPhotoPath
                     ) {
-                        repository.updatePhotoPaths(savedProfile.id, frontPath, sidePath, backPath)
+                        repository.updatePhotoPaths(frontPath, sidePath, backPath)
                     }
                 }
 
@@ -326,7 +323,7 @@ class ProfileViewModel(
 
                     // 保存分析结果到数据库（只有保存过 profile 才保存）
                     if (profile != null) {
-                        repository.updateBodyAnalysis(profile.id, analysis.rawJson)
+                        repository.updateBodyAnalysis(analysis.rawJson)
                     }
                 }
                 is QwenResult.Error -> {
@@ -343,8 +340,7 @@ class ProfileViewModel(
      */
     fun addWeightRecord(weightKg: Double, note: String = "") {
         viewModelScope.launch {
-            val record = WeightRecord(weightKg = weightKg, note = note)
-            repository.insertWeightRecord(record)
+            repository.addWeightRecord(weightKg, note)
 
             _uiState.update { it.copy(successMessage = "体重记录已添加") }
         }
@@ -355,7 +351,7 @@ class ProfileViewModel(
      */
     fun addMeasurement(measurement: BodyMeasurement) {
         viewModelScope.launch {
-            repository.insertMeasurement(measurement)
+            repository.addMeasurement(measurement)
             _uiState.update { it.copy(successMessage = "测量记录已添加") }
         }
     }
@@ -440,7 +436,7 @@ class ProfileViewModel(
     }
 
     class Factory(
-        private val repository: FitTrackRepository,
+        private val repository: UserProfileRepository,
         private val context: Context
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")

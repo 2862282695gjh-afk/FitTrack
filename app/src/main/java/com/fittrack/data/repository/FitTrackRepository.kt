@@ -8,14 +8,14 @@ import java.util.*
 
 /**
  * 健身追踪仓库
- * 统一管理所有数据访问
+ * 统一管理训练计划、动作、记录相关的数据访问
+ * 用户档案相关操作请使用 UserProfileRepository
  */
 class FitTrackRepository(
     private val workoutPlanDao: WorkoutPlanDao,
     private val exerciseDao: ExerciseDao,
     private val workoutRecordDao: WorkoutRecordDao,
-    private val exerciseRecordDao: ExerciseRecordDao,
-    private val userProfileDao: UserProfileDao? = null
+    private val exerciseRecordDao: ExerciseRecordDao
 ) {
 
     // ==================== 健身计划相关 ====================
@@ -108,98 +108,6 @@ class FitTrackRepository(
     suspend fun insertExerciseRecords(records: List<ExerciseRecord>) = exerciseRecordDao.insertExerciseRecords(records)
 
     suspend fun deleteExerciseRecord(record: ExerciseRecord) = exerciseRecordDao.deleteExerciseRecord(record)
-
-    // ==================== 用户档案相关 ====================
-
-    /**
-     * 获取用户档案
-     */
-    fun getProfile() = userProfileDao?.getProfileFlow()
-
-    /**
-     * 获取用户档案（一次性）
-     */
-    suspend fun getProfileOnce(): UserProfile? = userProfileDao?.getProfile()
-
-    /**
-     * 保存用户档案
-     */
-    suspend fun saveProfile(profile: UserProfile): Long {
-        return userProfileDao?.insertOrUpdateProfile(profile) ?: 0L
-    }
-
-    /**
-     * 更新身体参数
-     */
-    suspend fun updateBodyStats(profileId: Long, heightCm: Double, weightKg: Double, targetWeightKg: Double) {
-        userProfileDao?.updateBodyStats(profileId, heightCm, weightKg, targetWeightKg)
-    }
-
-    /**
-     * 更新照片路径
-     */
-    suspend fun updatePhotoPaths(profileId: Long, frontPath: String, sidePath: String, backPath: String) {
-        userProfileDao?.updatePhotoPaths(profileId, frontPath, sidePath, backPath)
-    }
-
-    /**
-     * 更新 AI 分析结果
-     */
-    suspend fun updateBodyAnalysis(profileId: Long, analysisJson: String) {
-        userProfileDao?.updateBodyAnalysis(profileId, analysisJson)
-    }
-
-    // ==================== 体重记录相关 ====================
-
-    /**
-     * 获取所有体重记录
-     */
-    fun getAllWeightRecords() = userProfileDao?.getAllWeightRecords()
-
-    /**
-     * 获取最近体重记录
-     */
-    fun getRecentWeightRecords(limit: Int = 30) = userProfileDao?.getRecentWeightRecords(limit)
-
-    /**
-     * 添加体重记录
-     */
-    suspend fun insertWeightRecord(record: WeightRecord): Long {
-        return userProfileDao?.insertWeightRecord(record) ?: 0L
-    }
-
-    /**
-     * 删除体重记录
-     */
-    suspend fun deleteWeightRecord(record: WeightRecord) {
-        userProfileDao?.deleteWeightRecord(record)
-    }
-
-    // ==================== 身体测量相关 ====================
-
-    /**
-     * 获取所有身体测量记录
-     */
-    fun getAllMeasurements() = userProfileDao?.getAllMeasurements()
-
-    /**
-     * 获取最近测量记录
-     */
-    fun getRecentMeasurements(limit: Int = 10) = userProfileDao?.getRecentMeasurements(limit)
-
-    /**
-     * 添加测量记录
-     */
-    suspend fun insertMeasurement(measurement: BodyMeasurement): Long {
-        return userProfileDao?.insertMeasurement(measurement) ?: 0L
-    }
-
-    /**
-     * 删除测量记录
-     */
-    suspend fun deleteMeasurement(measurement: BodyMeasurement) {
-        userProfileDao?.deleteMeasurement(measurement)
-    }
 
     // ==================== 辅助方法 ====================
 

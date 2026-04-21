@@ -62,12 +62,10 @@ class QwenRepository(private val settingsManager: SettingsManager) {
 
     // 动态获取 apiService，如果 baseUrl 变化则重新创建
     private val apiService: QwenApiService
-        get() {
+        get() = synchronized(this) {
             val baseUrl = settingsManager.apiBaseUrl.ifEmpty { QwenApiService.BASE_URL }
-            // 确保 baseUrl 以 / 结尾（Retrofit 要求）
             val normalizedBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
 
-            // 如果 baseUrl 变化，重新创建 apiService
             if (_apiService == null || cachedBaseUrl != normalizedBaseUrl) {
                 cachedBaseUrl = normalizedBaseUrl
                 _apiService = Retrofit.Builder()
@@ -77,7 +75,7 @@ class QwenRepository(private val settingsManager: SettingsManager) {
                     .build()
                     .create(QwenApiService::class.java)
             }
-            return _apiService!!
+            _apiService!!
         }
 
     private val apiKey: String?
@@ -537,12 +535,63 @@ class QwenRepository(private val settingsManager: SettingsManager) {
         }
     }
 
+    companion object {
+        private const val TAG = "QwenRepository"
+
+        /** 图片最大边长（px），超过此尺寸会等比缩小 */
+        private const val MAX_IMAGE_DIMENSION = 1024
+
+        @Volatile
+        private var INSTANCE: QwenRepository? = null
+
+        fun getInstance(settingsManager: SettingsManager): QwenRepository {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: QwenRepository(settingsManager).also { INSTANCE = it }
+            }
+        }
+
+        fun resetInstance() {
+            synchronized(this) { INSTANCE = null }
+        }
+    }
+
     /**
      * 将图片文件编码为 Base64
+     * 大图会先采样缩小到 MAX_IMAGE_DIMENSION 以内，避免 OOM
      */
     private fun encodeImageToBase64(imageFile: File): String? {
         return try {
-            val bitmap = BitmapFactory.decodeFile(imageFile.absolutePath)
+            // 1. 读取原始尺寸
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(imageFile.absolutePath, options)
+
+            // 2. 计算采样率
+            val (width, height) = options.outWidth to options.outHeight
+            var inSampleSize = 1
+            while (width / inSampleSize > MAX_IMAGE_DIMENSION ||
+                   height / inSampleSize > MAX_IMAGE_DIMENSION) {
+                inSampleSize *= 2
+            }
+
+            // 3. 采样解码
+            val decodeOptions = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
+            val sampledBitmap = BitmapFactory.decodeFile(imageFile.absolutePath, decodeOptions)
+                ?: return null
+
+            // 4. 精确缩放到目标尺寸以内
+            val bitmap = if (sampledBitmap.width > MAX_IMAGE_DIMENSION ||
+                              sampledBitmap.height > MAX_IMAGE_DIMENSION) {
+                val scale = MAX_IMAGE_DIMENSION.toFloat() / maxOf(sampledBitmap.width, sampledBitmap.height)
+                Bitmap.createScaledBitmap(
+                    sampledBitmap,
+                    (sampledBitmap.width * scale).toInt(),
+                    (sampledBitmap.height * scale).toInt(),
+                    true
+                ).also { if (it != sampledBitmap) sampledBitmap.recycle() }
+            } else {
+                sampledBitmap
+            }
+
             val outputStream = ByteArrayOutputStream()
 
             // 根据文件类型选择压缩格式
@@ -552,8 +601,10 @@ class QwenRepository(private val settingsManager: SettingsManager) {
             }
 
             bitmap.compress(format, 85, outputStream)
+            bitmap.recycle()
             Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
         } catch (e: Exception) {
+            Log.e(TAG, "图片编码失败: ${e.message}")
             null
         }
     }
@@ -723,21 +774,4 @@ class QwenRepository(private val settingsManager: SettingsManager) {
         }
     }
 
-    companion object {
-        private const val TAG = "QwenRepository"
-
-        @Volatile
-        private var INSTANCE: QwenRepository? = null
-
-        fun getInstance(settingsManager: SettingsManager): QwenRepository {
-            return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: QwenRepository(settingsManager).also { INSTANCE = it }
-            }
-        }
-
-        // 重置单例（用于配置变更后重新创建）
-        fun resetInstance() {
-            INSTANCE = null
-        }
-    }
 }
