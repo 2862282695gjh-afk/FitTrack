@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.unit.IntOffset
 
 /**
  * FitTrack 全局动画配置 — 多邻国 (Duolingo) 风格
