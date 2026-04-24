@@ -7,6 +7,7 @@ import com.fittrack.ui.navigation.ButtonSpring
 import com.fittrack.ui.navigation.IconSpring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -318,7 +319,7 @@ fun HomeScreen(
 // ── 底部导航项（带弹性缩放） ──────────────────────────────
 
 @Composable
-private fun NavItem(
+private fun RowScope.NavItem(
     selected: Boolean,
     onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
