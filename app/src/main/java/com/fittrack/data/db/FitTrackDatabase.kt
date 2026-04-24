@@ -13,6 +13,8 @@ import com.fittrack.data.entity.Exercise
 import com.fittrack.data.entity.ExerciseRecord
 import com.fittrack.data.entity.UserProfile
 import com.fittrack.data.entity.WeightRecord
+import com.fittrack.data.entity.MealRecord
+import com.fittrack.data.entity.NutritionAdvice
 import com.fittrack.data.entity.WorkoutPlan
 import com.fittrack.data.entity.WorkoutRecord
 import com.fittrack.data.entity.WorkoutSchedule
@@ -28,9 +30,11 @@ import com.fittrack.data.entity.WorkoutSchedule
         BodyMeasurement::class,
         ChatMessage::class,
         ChatSession::class,
-        WorkoutSchedule::class
+        WorkoutSchedule::class,
+        MealRecord::class,
+        NutritionAdvice::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class FitTrackDatabase : RoomDatabase() {
@@ -42,6 +46,8 @@ abstract class FitTrackDatabase : RoomDatabase() {
     abstract fun userProfileDao(): UserProfileDao
     abstract fun chatDao(): ChatDao
     abstract fun workoutScheduleDao(): WorkoutScheduleDao
+    abstract fun mealRecordDao(): MealRecordDao
+    abstract fun nutritionAdviceDao(): NutritionAdviceDao
 
     companion object {
         @Volatile
@@ -244,6 +250,59 @@ abstract class FitTrackDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * 数据库迁移：版本 8 -> 9
+         * 添加饮食记录表（meal_records）和营养推荐表（nutrition_advices）
+         *
+         * 回滚方案：DROP TABLE meal_records; DROP TABLE nutrition_advices;
+         */
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS meal_records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        date TEXT NOT NULL,
+                        mealType TEXT NOT NULL DEFAULT 'lunch',
+                        foodsJson TEXT NOT NULL DEFAULT '[]',
+                        totalCalories REAL NOT NULL DEFAULT 0,
+                        totalProtein REAL NOT NULL DEFAULT 0,
+                        totalCarbs REAL NOT NULL DEFAULT 0,
+                        totalFat REAL NOT NULL DEFAULT 0,
+                        note TEXT NOT NULL DEFAULT '',
+                        createdAt INTEGER NOT NULL
+                    )
+                """)
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_meal_records_date ON meal_records(date)
+                """)
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_meal_records_date_type ON meal_records(date, mealType)
+                """)
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS nutrition_advices (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        date TEXT NOT NULL,
+                        mealType TEXT NOT NULL DEFAULT 'lunch',
+                        goal TEXT NOT NULL DEFAULT '',
+                        targetCalories REAL NOT NULL DEFAULT 0,
+                        targetProtein REAL NOT NULL DEFAULT 0,
+                        targetCarbs REAL NOT NULL DEFAULT 0,
+                        targetFat REAL NOT NULL DEFAULT 0,
+                        adviceJson TEXT NOT NULL DEFAULT '[]',
+                        summary TEXT NOT NULL DEFAULT '',
+                        createdAt INTEGER NOT NULL
+                    )
+                """)
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_nutrition_advices_date ON nutrition_advices(date)
+                """)
+                db.execSQL("""
+                    CREATE INDEX IF NOT EXISTS index_nutrition_advices_date_type ON nutrition_advices(date, mealType)
+                """)
+            }
+        }
+
         fun getDatabase(context: Context): FitTrackDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -251,7 +310,7 @@ abstract class FitTrackDatabase : RoomDatabase() {
                     FitTrackDatabase::class.java,
                     "fittrack_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .build()
                 INSTANCE = instance
                 instance

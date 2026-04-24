@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.fittrack.data.db.FitTrackDatabase
 import com.fittrack.data.repository.FitTrackRepository
+import com.fittrack.data.repository.MealRepository
 import com.fittrack.data.repository.UserProfileRepository
 import com.fittrack.data.storage.SettingsManager
 import com.fittrack.data.api.QwenRepository
@@ -30,6 +31,7 @@ import com.fittrack.ui.screens.StatisticsScreen
 import com.fittrack.ui.screens.WorkoutScreen
 import com.fittrack.ui.viewmodel.ChatViewModel
 import com.fittrack.ui.viewmodel.FitTrackViewModel
+import com.fittrack.ui.viewmodel.MealViewModel
 import com.fittrack.ui.viewmodel.PlanGeneratorViewModel
 import com.fittrack.ui.viewmodel.ProfileViewModel
 import com.fittrack.ui.viewmodel.SettingsViewModel
@@ -66,6 +68,14 @@ fun FitTrackNavHost(
 
     // 创建 FitTrackViewModel 并注入 QwenRepository
     val viewModel: FitTrackViewModel = viewModel(factory = FitTrackViewModel.Factory(repository, qwenRepository))
+
+    // 创建 MealRepository 和 MealViewModel
+    val mealRepository = remember {
+        MealRepository(
+            mealRecordDao = database.mealRecordDao(),
+            nutritionAdviceDao = database.nutritionAdviceDao()
+        )
+    }
 
     // 检查是否已配置 API Key（使用初始值，避免动态变化导致导航问题）
     val isConfigured by settingsViewModel.isConfigured.collectAsState()
