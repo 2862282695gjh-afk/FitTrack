@@ -34,7 +34,7 @@ import com.fittrack.data.entity.WorkoutSchedule
         MealRecord::class,
         NutritionAdvice::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class FitTrackDatabase : RoomDatabase() {
@@ -251,11 +251,21 @@ abstract class FitTrackDatabase : RoomDatabase() {
         }
 
         /**
-         * 数据库迁移：版本 8 -> 9
-         * 添加饮食记录表（meal_records）和营养推荐表（nutrition_advices）
+         * 数据库迁移：版本 9 -> 10
+         * 给 exercises 表添加 restIntervalSeconds 字段（组间歇时间）
          *
-         * 回滚方案：DROP TABLE meal_records; DROP TABLE nutrition_advices;
+         * 回滚方案：无（新增字段有默认值，可直接忽略）
          */
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    ALTER TABLE exercises
+                    ADD COLUMN restIntervalSeconds INTEGER NOT NULL DEFAULT 90
+                """)
+            }
+        }
+
+        /**
         private val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
@@ -310,7 +320,7 @@ abstract class FitTrackDatabase : RoomDatabase() {
                     FitTrackDatabase::class.java,
                     "fittrack_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .build()
                 INSTANCE = instance
                 instance

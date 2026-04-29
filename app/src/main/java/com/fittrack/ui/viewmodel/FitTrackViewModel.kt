@@ -12,20 +12,38 @@ import com.fittrack.data.entity.ExerciseRecord
 import com.fittrack.data.entity.WorkoutPlan
 import com.fittrack.data.entity.WorkoutRecord
 import com.fittrack.data.repository.FitTrackRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+
+/** 单组记录 */
+data class SetRecord(
+    val reps: Int = 0,
+    val weight: Double = 0.0,
+    val completed: Boolean = false
+)
+
+/** 单个动作的训练会话数据（含计时器状态） */
+data class ExerciseSessionData(
+    val setRecords: List<SetRecord> = emptyList(),
+    val restSeconds: Int = 90,            // 配置的组间歇时间
+    val restTimerRemaining: Int = 0,       // 倒计时剩余秒数（0 = 未计时）
+    val isResting: Boolean = false,
+    val currentSetIndex: Int = 0           // 当前正在做/刚完成第几组（0-based）
+)
 
 data class WorkoutSession(
     val planId: Long = 0,
     val planName: String = "",
     val exercises: List<Exercise> = emptyList(),
     val currentExerciseIndex: Int = 0,
-    val exerciseRecords: Map<Long, ExerciseRecordData> = emptyMap(),
+    val exerciseSessionData: Map<Long, ExerciseSessionData> = emptyMap(),
     val startTime: Long = System.currentTimeMillis()
 )
 
+/** @deprecated 使用 ExerciseSessionData 代替 */
 data class ExerciseRecordData(
     val sets: Int = 0,
     val reps: String = "",
@@ -36,6 +54,9 @@ class FitTrackViewModel(
     val repository: FitTrackRepository,
     private val qwenRepository: QwenRepository? = null
 ) : ViewModel() {
+
+    // 组间歇计时器
+    private var restTimerJob: Job? = null
 
     // 所有健身计划
     val allPlans: StateFlow<List<WorkoutPlan>> = repository.getAllPlans()
@@ -173,25 +194,137 @@ class FitTrackViewModel(
             // 如果今天没有安排动作，显示所有动作（兼容旧数据）
             val exercises = if (todayExercises.isEmpty()) allExercises else todayExercises
 
-            val records = exercises.associate { exercise ->
-                exercise.id to ExerciseRecordData()
+            // 用默认重量和次数预填逐组数据
+            val sessionDataMap = exercises.associate { exercise ->
+                exercise.id to ExerciseSessionData(
+                    setRecords = (1..exercise.defaultSets).map {
+                        SetRecord(
+                            reps = exercise.defaultReps,
+                            weight = exercise.defaultWeight
+                        )
+                    },
+                    restSeconds = exercise.restIntervalSeconds,
+                    currentSetIndex = 0
+                )
             }
             _workoutSession.value = WorkoutSession(
                 planId = plan.id,
                 planName = plan.name,
                 exercises = exercises,
                 currentExerciseIndex = 0,
-                exerciseRecords = records
+                exerciseSessionData = sessionDataMap
             )
         }
     }
 
-    // 更新动作记录
+    // ========== 逐组训练操作 ==========
+
+    /** 更新某一组的数据（用户修改 reps 或 weight） */
+    fun updateSetRecord(exerciseId: Long, setIndex: Int, reps: Int, weight: Double) {
+        _workoutSession.value?.let { session ->
+            val updatedMap = session.exerciseSessionData.toMutableMap()
+            val data = updatedMap[exerciseId] ?: return
+            val updatedSets = data.setRecords.toMutableList()
+            if (setIndex in updatedSets.indices) {
+                updatedSets[setIndex] = updatedSets[setIndex].copy(reps = reps, weight = weight)
+                updatedMap[exerciseId] = data.copy(setRecords = updatedSets)
+                _workoutSession.value = session.copy(exerciseSessionData = updatedMap)
+            }
+        }
+    }
+
+    /** 完成当前组 — 标记完成，如果不是最后一组则启动组间歇计时 */
+    fun completeCurrentSet(exerciseId: Long) {
+        _workoutSession.value?.let { session ->
+            val updatedMap = session.exerciseSessionData.toMutableMap()
+            val data = updatedMap[exerciseId] ?: return
+            val updatedSets = data.setRecords.toMutableList()
+            val setIdx = data.currentSetIndex
+
+            if (setIdx in updatedSets.indices) {
+                // 标记当前组完成
+                updatedSets[setIdx] = updatedSets[setIdx].copy(completed = true)
+
+                // 检查是否还有下一组
+                val hasNextSet = setIdx + 1 < updatedSets.size
+                val nextSetIndex = if (hasNextSet) setIdx + 1 else setIdx
+
+                updatedMap[exerciseId] = data.copy(
+                    setRecords = updatedSets,
+                    currentSetIndex = nextSetIndex,
+                    isResting = hasNextSet,
+                    restTimerRemaining = if (hasNextSet) data.restSeconds else 0
+                )
+                _workoutSession.value = session.copy(exerciseSessionData = updatedMap)
+
+                // 如果还有下一组，启动倒计时
+                if (hasNextSet) {
+                    startRestCountdown(exerciseId, data.restSeconds)
+                }
+            }
+        }
+    }
+
+    /** 跳过组间歇 */
+    fun skipRest() {
+        restTimerJob?.cancel()
+        restTimerJob = null
+        _workoutSession.value?.let { session ->
+            val updatedMap = session.exerciseSessionData.mapValues { (_, data) ->
+                if (data.isResting) {
+                    data.copy(isResting = false, restTimerRemaining = 0)
+                } else data
+            }
+            _workoutSession.value = session.copy(exerciseSessionData = updatedMap)
+        }
+    }
+
+    /** 启动组间歇倒计时 */
+    private fun startRestCountdown(exerciseId: Long, totalSeconds: Int) {
+        restTimerJob?.cancel()
+        restTimerJob = viewModelScope.launch {
+            var remaining = totalSeconds
+            while (remaining > 0) {
+                kotlinx.coroutines.delay(1000L)
+                remaining--
+                _workoutSession.value?.let { session ->
+                    val data = session.exerciseSessionData[exerciseId] ?: return@let
+                    if (!data.isResting) { // 被跳过了
+                        return@launch
+                    }
+                    val updatedMap = session.exerciseSessionData.toMutableMap()
+                    updatedMap[exerciseId] = data.copy(restTimerRemaining = remaining)
+                    _workoutSession.value = session.copy(exerciseSessionData = updatedMap)
+                }
+            }
+            // 倒计时结束，清除 resting 状态
+            _workoutSession.value?.let { session ->
+                val data = session.exerciseSessionData[exerciseId] ?: return@let
+                val updatedMap = session.exerciseSessionData.toMutableMap()
+                updatedMap[exerciseId] = data.copy(isResting = false, restTimerRemaining = 0)
+                _workoutSession.value = session.copy(exerciseSessionData = updatedMap)
+            }
+        }
+    }
+
+    // ========== 兼容旧接口 ==========
+
+    /** @deprecated 使用逐组 API 代替 */
     fun updateExerciseRecord(exerciseId: Long, sets: Int, reps: String, weights: String) {
         _workoutSession.value?.let { session ->
-            val updatedRecords = session.exerciseRecords.toMutableMap()
-            updatedRecords[exerciseId] = ExerciseRecordData(sets, reps, weights)
-            _workoutSession.value = session.copy(exerciseRecords = updatedRecords)
+            val updatedMap = session.exerciseSessionData.toMutableMap()
+            val data = updatedMap[exerciseId] ?: ExerciseSessionData()
+            val repList = reps.split(",").mapNotNull { it.trim().toIntOrNull() }
+            val weightList = weights.split(",").mapNotNull { it.trim().toDoubleOrNull() }
+            val setRecords = (0 until sets.coerceAtLeast(repList.size, weightList.size)).map { i ->
+                SetRecord(
+                    reps = repList.getOrElse(i) { 0 },
+                    weight = weightList.getOrElse(i) { 0.0 },
+                    completed = true
+                )
+            }
+            updatedMap[exerciseId] = data.copy(setRecords = setRecords, currentSetIndex = setRecords.size.coerceAtMost(1) - 1)
+            _workoutSession.value = session.copy(exerciseSessionData = updatedMap)
         }
     }
 
@@ -222,6 +355,10 @@ class FitTrackViewModel(
         energyLevel: Int = 3,
         onComplete: () -> Unit = {}
     ) {
+        // 停止可能还在运行的计时器
+        restTimerJob?.cancel()
+        restTimerJob = null
+
         viewModelScope.launch {
             _workoutSession.value?.let { session ->
                 val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -236,17 +373,18 @@ class FitTrackViewModel(
                     emptyList()
                 }
 
-                // 构建当前训练的动作记录列表
+                // 构建当前训练的动作记录列表（逐组数据 → 逗号分隔字符串）
                 val currentExerciseRecords = mutableListOf<ExerciseRecord>()
                 session.exercises.forEach { exercise ->
-                    val recordData = session.exerciseRecords[exercise.id] ?: ExerciseRecordData()
+                    val sessionData = session.exerciseSessionData[exercise.id]
+                    val completedSets = sessionData?.setRecords?.filter { it.completed } ?: emptyList()
                     val exerciseRecord = ExerciseRecord(
                         recordId = 0L, // 临时ID，插入后会更新
                         exerciseId = exercise.id,
                         exerciseName = exercise.name,
-                        sets = recordData.sets,
-                        reps = recordData.reps,
-                        weights = recordData.weights
+                        sets = completedSets.size,
+                        reps = completedSets.joinToString(",") { it.reps.toString() },
+                        weights = completedSets.joinToString(",") { it.weight.toString() }
                     )
                     currentExerciseRecords.add(exerciseRecord)
                 }
@@ -417,6 +555,8 @@ class FitTrackViewModel(
 
     // 取消训练
     fun cancelWorkout() {
+        restTimerJob?.cancel()
+        restTimerJob = null
         _workoutSession.value = null
     }
 

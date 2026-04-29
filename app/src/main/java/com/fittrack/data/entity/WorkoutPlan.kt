@@ -41,6 +41,7 @@ data class WorkoutPlan(
  * @property defaultReps 默认次数
  * @property defaultWeight 默认重量(kg)
  * @property defaultDuration 默认时长(分钟)
+ * @property restIntervalSeconds 组间歇时间(秒)，默认 90 秒
  * @property notes 备注
  * @property dayOfWeek 训练日（1-7 表示周一到周日）
  * @property orderIndex 排序索引
@@ -56,6 +57,7 @@ data class Exercise(
     val defaultReps: Int = 10,
     val defaultWeight: Double = 0.0,
     val defaultDuration: Int = 0, // minutes, for cardio
+    val restIntervalSeconds: Int = 90,
     val notes: String = "",
     val dayOfWeek: Int = 1, // 1-7 for Monday-Sunday
     val orderIndex: Int = 0
