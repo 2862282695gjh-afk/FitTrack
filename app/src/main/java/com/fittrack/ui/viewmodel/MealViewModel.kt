@@ -31,6 +31,21 @@ class MealViewModel(
 
     companion object {
         private const val TAG = "MealViewModel"
+
+        fun getTodayDate(): String {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            return sdf.format(Date())
+        }
+
+        fun getCurrentMealType(): String {
+            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+            return when {
+                hour < 10 -> "breakfast"
+                hour < 14 -> "lunch"
+                hour < 20 -> "dinner"
+                else -> "snack"
+            }
+        }
     }
 
     private val nutritionAdvisor = NutritionAdvisor(qwenRepository)
@@ -242,23 +257,6 @@ class MealViewModel(
                 return MealViewModel(mealRepository, userProfileRepository, qwenRepository) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class")
-        }
-    }
-
-    companion object {
-        fun getTodayDate(): String {
-            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            return sdf.format(Date())
-        }
-
-        fun getCurrentMealType(): String {
-            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-            return when {
-                hour < 10 -> "breakfast"
-                hour < 14 -> "lunch"
-                hour < 20 -> "dinner"
-                else -> "snack"
-            }
         }
     }
 }
