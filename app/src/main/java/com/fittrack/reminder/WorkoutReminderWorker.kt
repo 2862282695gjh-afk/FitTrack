@@ -153,6 +153,10 @@ class WorkoutReminderWorker(
             }
         }
 
+        // 使用 planId 作为通知 ID 的一部分，避免同一毫秒内多个 Worker 碰撞
+        val planId = inputData.getLong("planId", 0)
+        val notificationId = (planId % Int.MAX_VALUE).toInt().coerceAtLeast(1)
+
         val notification = NotificationCompat.Builder(applicationContext, ReminderManager.CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("该训练了！")
@@ -162,6 +166,6 @@ class WorkoutReminderWorker(
             .build()
 
         NotificationManagerCompat.from(applicationContext)
-            .notify(System.currentTimeMillis().toInt(), notification)
+            .notify(notificationId, notification)
     }
 }

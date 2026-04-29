@@ -192,7 +192,7 @@ class PressureAnalyzer {
             val lowEnergyCount = recentRecords.count { it.energyLevel <= 2 }
             val lowSleepCount = recentRecords.count { it.sleepQuality <= 2 }
 
-            return ((lowEnergyCount * 20 + lowSleepCount * 25) / recentRecords.size).toInt()
+            return ((lowEnergyCount * 20 + lowSleepCount * 25).toFloat() / recentRecords.size).toInt()
                 .coerceIn(0, 100)
         }
 

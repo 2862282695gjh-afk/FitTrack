@@ -763,11 +763,54 @@ class QwenRepository(private val settingsManager: SettingsManager) {
      * 从响应中提取 JSON 字符串
      */
     private fun extractJson(content: String): String {
-        // 尝试找到 JSON 块
-        val startIndex = content.indexOf('{')
-        val endIndex = content.lastIndexOf('}')
+        // 1. 尝试从 markdown 代码块中提取
+        val codeBlockRegex = """```(?:json)?\s*\n?([\s\S]*?)```""".toRegex()
+        val codeBlockMatch = codeBlockRegex.findAll(content).firstOrNull {
+            it.groupValues[1].trim().startsWith("{")
+        }
+        if (codeBlockMatch != null) {
+            return codeBlockMatch.groupValues[1].trim()
+        }
 
-        return if (startIndex != -1 && endIndex != -1 && endIndex > startIndex) {
+        // 2. 括号匹配：找到最外层完整的 JSON 对象
+        var depth = 0
+        var startIndex = -1
+        var endIndex = -1
+        var inString = false
+        var escaped = false
+
+        for (i in content.indices) {
+            val c = content[i]
+            if (escaped) {
+                escaped = false
+                continue
+            }
+            if (c == '\\' && inString) {
+                escaped = true
+                continue
+            }
+            if (c == '"') {
+                inString = !inString
+                continue
+            }
+            if (inString) continue
+
+            when (c) {
+                '{' -> {
+                    if (depth == 0) startIndex = i
+                    depth++
+                }
+                '}' -> {
+                    depth--
+                    if (depth == 0) {
+                        endIndex = i
+                        break
+                    }
+                }
+            }
+        }
+
+        return if (startIndex != -1 && endIndex != -1) {
             content.substring(startIndex, endIndex + 1)
         } else {
             content
