@@ -319,6 +319,8 @@ class FitTrackViewModel(
     }
 
     // 完成训练
+    private var isFinishing = false
+
     fun finishWorkout(
         rating: Int,
         notes: String,
@@ -327,106 +329,113 @@ class FitTrackViewModel(
         energyLevel: Int = 3,
         onComplete: () -> Unit = {}
     ) {
+        // 防止重复点击
+        if (isFinishing) return
+        isFinishing = true
+
         // 停止可能还在运行的计时器
         restTimerJob?.cancel()
         restTimerJob = null
 
+        // 立即清除 session，UI 马上退出训练界面
+        val session = _workoutSession.value ?: run { isFinishing = false; return }
+        _workoutSession.value = null
+        onComplete()
+
+        // 后台生成 AI 总结 + 保存记录（不阻塞 UI）
         viewModelScope.launch {
-            _workoutSession.value?.let { session ->
-                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                val today = sdf.format(Date())
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val today = sdf.format(Date())
 
-                // 获取最近训练记录用于压力分析
-                val recentRecords = try {
-                    repository.getAllRecords()
-                        .first()
-                        .take(7)
-                } catch (e: Exception) {
-                    emptyList()
-                }
+            // 获取最近训练记录用于压力分析
+            val recentRecords = try {
+                repository.getAllRecords()
+                    .first()
+                    .take(7)
+            } catch (e: Exception) {
+                emptyList()
+            }
 
-                // 构建当前训练的动作记录列表（逐组数据 → 逗号分隔字符串）
-                val currentExerciseRecords = mutableListOf<ExerciseRecord>()
-                session.exercises.forEach { exercise ->
-                    val sessionData = session.exerciseSessionData[exercise.id]
-                    val allSets = sessionData?.setRecords ?: emptyList()
-                    val exerciseRecord = ExerciseRecord(
-                        recordId = 0L, // 临时ID，插入后会更新
-                        exerciseId = exercise.id,
-                        exerciseName = exercise.name,
-                        sets = allSets.size,
-                        reps = allSets.joinToString(",") { it.reps.toString() },
-                        weights = allSets.joinToString(",") { it.weight.toString() }
-                    )
-                    currentExerciseRecords.add(exerciseRecord)
-                }
+            // 构建当前训练的动作记录列表（逐组数据 → 逗号分隔字符串）
+            val currentExerciseRecords = mutableListOf<ExerciseRecord>()
+            session.exercises.forEach { exercise ->
+                val sessionData = session.exerciseSessionData[exercise.id]
+                val allSets = sessionData?.setRecords ?: emptyList()
+                val exerciseRecord = ExerciseRecord(
+                    recordId = 0L, // 临时ID，插入后会更新
+                    exerciseId = exercise.id,
+                    exerciseName = exercise.name,
+                    sets = allSets.size,
+                    reps = allSets.joinToString(",") { it.reps.toString() },
+                    weights = allSets.joinToString(",") { it.weight.toString() }
+                )
+                currentExerciseRecords.add(exerciseRecord)
+            }
 
-                // 计算压力水平
-                val pressureAnalysis = try {
-                    com.fittrack.data.analyzer.PressureAnalyzer.analyzePressure(
-                        WorkoutRecord(
-                            planId = session.planId,
-                            date = today,
-                            startTime = session.startTime,
-                            endTime = System.currentTimeMillis(),
-                            totalDuration = ((System.currentTimeMillis() - session.startTime) / 60000).toInt(),
-                            feeling = rating,
-                            sleepQuality = sleepQuality,
-                            appetite = appetite,
-                            energyLevel = energyLevel
-                        ),
-                        recentRecords,
-                        currentExerciseRecords
-                    )
-                } catch (e: Exception) {
-                    null
-                }
-
-                // 生成 AI 训练总结
-                val aiSummary = try {
-                    generateWorkoutSummary(
-                        session = session,
-                        exerciseRecords = currentExerciseRecords,
-                        rating = rating,
+            // 计算压力水平
+            val pressureAnalysis = try {
+                com.fittrack.data.analyzer.PressureAnalyzer.analyzePressure(
+                    WorkoutRecord(
+                        planId = session.planId,
+                        date = today,
+                        startTime = session.startTime,
+                        endTime = System.currentTimeMillis(),
+                        totalDuration = ((System.currentTimeMillis() - session.startTime) / 60000).toInt(),
+                        feeling = rating,
                         sleepQuality = sleepQuality,
                         appetite = appetite,
-                        energyLevel = energyLevel,
-                        duration = ((System.currentTimeMillis() - session.startTime) / 60000).toInt(),
-                        pressureAnalysis = pressureAnalysis
-                    )
-                } catch (e: Exception) {
-                    Log.e("FitTrackViewModel", "生成训练总结失败", e)
-                    ""
-                }
+                        energyLevel = energyLevel
+                    ),
+                    recentRecords,
+                    currentExerciseRecords
+                )
+            } catch (e: Exception) {
+                null
+            }
 
-                // 创建训练记录
-                val workoutRecord = WorkoutRecord(
-                    planId = session.planId,
-                    date = today,
-                    startTime = session.startTime,
-                    endTime = System.currentTimeMillis(),
-                    totalDuration = ((System.currentTimeMillis() - session.startTime) / 60000).toInt(),
-                    feeling = rating,
-                    notes = notes,
+            // 生成 AI 训练总结
+            val aiSummary = try {
+                generateWorkoutSummary(
+                    session = session,
+                    exerciseRecords = currentExerciseRecords,
+                    rating = rating,
                     sleepQuality = sleepQuality,
                     appetite = appetite,
                     energyLevel = energyLevel,
-                    metabolicPressure = pressureAnalysis?.metabolicPressure ?: 0,
-                    mentalPressure = pressureAnalysis?.mentalPressure ?: 0,
-                    isDeload = pressureAnalysis?.needsDeload ?: false,
-                    aiSummary = aiSummary
+                    duration = ((System.currentTimeMillis() - session.startTime) / 60000).toInt(),
+                    pressureAnalysis = pressureAnalysis
                 )
-                val recordId = repository.insertWorkoutRecord(workoutRecord)
-
-                // 保存每个动作的记录
-                currentExerciseRecords.forEach { exerciseRecord ->
-                    val recordWithId = exerciseRecord.copy(recordId = recordId)
-                    repository.insertExerciseRecord(recordWithId)
-                }
-
-                _workoutSession.value = null
-                onComplete()
+            } catch (e: Exception) {
+                Log.e("FitTrackViewModel", "生成训练总结失败", e)
+                ""
             }
+
+            // 创建训练记录
+            val workoutRecord = WorkoutRecord(
+                planId = session.planId,
+                date = today,
+                startTime = session.startTime,
+                endTime = System.currentTimeMillis(),
+                totalDuration = ((System.currentTimeMillis() - session.startTime) / 60000).toInt(),
+                feeling = rating,
+                notes = notes,
+                sleepQuality = sleepQuality,
+                appetite = appetite,
+                energyLevel = energyLevel,
+                metabolicPressure = pressureAnalysis?.metabolicPressure ?: 0,
+                mentalPressure = pressureAnalysis?.mentalPressure ?: 0,
+                isDeload = pressureAnalysis?.needsDeload ?: false,
+                aiSummary = aiSummary
+            )
+            val recordId = repository.insertWorkoutRecord(workoutRecord)
+
+            // 保存每个动作的记录
+            currentExerciseRecords.forEach { exerciseRecord ->
+                val recordWithId = exerciseRecord.copy(recordId = recordId)
+                repository.insertExerciseRecord(recordWithId)
+            }
+
+            isFinishing = false
         }
     }
 
