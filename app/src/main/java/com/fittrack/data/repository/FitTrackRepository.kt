@@ -68,16 +68,12 @@ class FitTrackRepository(
 
     fun getRecordsByPlan(planId: Long): Flow<List<WorkoutRecord>> = workoutRecordDao.getRecordsByPlan(planId)
 
-    fun getRecordsForPlan(planId: Long): Flow<List<WorkoutRecord>> = workoutRecordDao.getRecordsByPlan(planId)
-
     fun getRecordsByDate(date: String): Flow<List<WorkoutRecord>> = workoutRecordDao.getRecordsByDate(date)
 
     fun getRecordsBetween(startDate: String, endDate: String): Flow<List<WorkoutRecord>> =
         workoutRecordDao.getRecordsBetween(startDate, endDate)
 
     suspend fun getRecordById(recordId: Long): WorkoutRecord? = workoutRecordDao.getRecordById(recordId)
-
-    suspend fun insertRecord(record: WorkoutRecord): Long = workoutRecordDao.insertRecord(record)
 
     suspend fun insertWorkoutRecord(record: WorkoutRecord): Long = workoutRecordDao.insertRecord(record)
 

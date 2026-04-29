@@ -30,10 +30,16 @@ class SettingsManager(context: Context) {
             )
         } catch (e: Exception) {
             Log.e("SettingsManager", "EncryptedSharedPreferences 创建失败，使用普通存储", e)
+            _isUsingSecureStorage = false
             // 回退到普通 SharedPreferences
             appContext.getSharedPreferences("fittrack_prefs", Context.MODE_PRIVATE)
         }
     }
+
+    /** 是否正在使用加密存储（false 表示已回退到普通存储） */
+    @Volatile
+    private var _isUsingSecureStorage = true
+    val isUsingSecureStorage: Boolean get() = _isUsingSecureStorage
 
     // API Key 相关
     var apiKey: String?

@@ -535,20 +535,51 @@ class ChatViewModel(
     }
 
     /**
-     * 将图片 Uri 转为 Base64
+     * 将图片 Uri 转为 Base64（带 OOM 保护：大图自动缩小）
      */
     private fun imageUriToBase64(context: Context, uri: Uri): String? {
         return try {
             val inputStream = context.contentResolver.openInputStream(uri) ?: return null
-            val bitmap = BitmapFactory.decodeStream(inputStream)
+
+            // 先读取原始尺寸，计算采样率
+            val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeStream(inputStream, null, boundsOptions)
             inputStream.close()
+
+            val maxWidth = 1024
+            val maxDim = maxOf(boundsOptions.outWidth, boundsOptions.outHeight)
+            var inSampleSize = 1
+            while (inSampleSize * 2 <= maxDim && maxDim / (inSampleSize * 2) >= maxWidth) {
+                inSampleSize *= 2
+            }
+
+            // 采样解码
+            val decodeOptions = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
+            val sampledInputStream = context.contentResolver.openInputStream(uri) ?: return null
+            val bitmap = BitmapFactory.decodeStream(sampledInputStream, null, decodeOptions)
+            sampledInputStream.close()
 
             if (bitmap == null) return null
 
+            // 精确缩放到目标尺寸以内
+            val finalBitmap = if (bitmap.width > maxWidth || bitmap.height > maxWidth) {
+                val scale = maxWidth.toFloat() / maxOf(bitmap.width, bitmap.height)
+                Bitmap.createScaledBitmap(
+                    bitmap,
+                    (bitmap.width * scale).toInt(),
+                    (bitmap.height * scale).toInt(),
+                    true
+                ).also { if (it != bitmap) bitmap.recycle() }
+            } else {
+                bitmap
+            }
+
             val outputStream = ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+            finalBitmap.compress(Bitmap.CompressFormat.JPEG, 80, outputStream)
+            finalBitmap.recycle()
             Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
         } catch (e: Exception) {
+            Log.e("ChatViewModel", "图片编码失败: ${e.message}")
             null
         }
     }

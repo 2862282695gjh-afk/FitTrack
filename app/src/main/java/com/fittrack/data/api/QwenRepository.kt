@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import android.util.Log
@@ -97,35 +98,11 @@ class QwenRepository(private val settingsManager: SettingsManager) {
         messages: List<QwenMessage>,
         model: String = QwenApiService.MODEL_QWEN_PLUS,
         temperature: Double = 0.7
-    ): QwenResult<String> = withContext(Dispatchers.IO) {
-        val auth = authHeader
-        if (auth.isNullOrBlank()) {
-            return@withContext QwenResult.Error("API Key 未配置")
-        }
-
-        val request = QwenChatRequest(
-            model = model,
-            messages = messages,
-            temperature = temperature
-        )
-
-        try {
-            val response = apiService.chatCompletion(auth, request)
-            if (response.isSuccessful && response.body() != null) {
-                val content = response.body()!!.choices.firstOrNull()?.message?.getTextContent()
-                if (content != null && content.isNotEmpty()) {
-                    QwenResult.Success(content)
-                } else {
-                    QwenResult.Error("响应内容为空")
-                }
-            } else {
-                val errorBody = response.errorBody()?.string()
-                QwenResult.Error("请求失败: ${response.code()} - $errorBody")
-            }
-        } catch (e: Exception) {
-            QwenResult.Error("网络错误: ${e.message}")
-        }
-    }
+    ): QwenResult<String> = executeApiCall("网络错误", { auth ->
+        apiService.chatCompletion(auth, QwenChatRequest(
+            model = model, messages = messages, temperature = temperature
+        ))
+    }) { it }
 
     /**
      * 发送流式文本对话请求
@@ -207,14 +184,8 @@ class QwenRepository(private val settingsManager: SettingsManager) {
         imageBase64: String,
         systemPrompt: String,
         model: String = QwenApiService.MODEL_QWEN_VL_PLUS
-    ): QwenResult<String> = withContext(Dispatchers.IO) {
-        val auth = authHeader
-        if (auth.isNullOrBlank()) {
-            return@withContext QwenResult.Error("API Key 未配置")
-        }
-
-        // 构建视觉请求
-        val request = QwenVLRequest(
+    ): QwenResult<String> = executeApiCall("网络错误", { auth ->
+        apiService.vlCompletion(auth, QwenVLRequest(
             model = model,
             messages = listOf(
                 QwenVLMessage(
@@ -234,25 +205,8 @@ class QwenRepository(private val settingsManager: SettingsManager) {
             ),
             temperature = 0.7,
             maxTokens = 2048
-        )
-
-        try {
-            val response = apiService.vlCompletion(auth, request)
-            if (response.isSuccessful && response.body() != null) {
-                val content = response.body()!!.choices.firstOrNull()?.message?.getTextContent()
-                if (content != null && content.isNotEmpty()) {
-                    QwenResult.Success(content)
-                } else {
-                    QwenResult.Error("响应内容为空")
-                }
-            } else {
-                val errorBody = response.errorBody()?.string()
-                QwenResult.Error("请求失败: ${response.code()} - $errorBody")
-            }
-        } catch (e: Exception) {
-            QwenResult.Error("网络错误: ${e.message}")
-        }
-    }
+        ))
+    }) { it }
 
     /**
      * 发送带多张图片的对话请求（用于视频帧分析）
@@ -266,59 +220,21 @@ class QwenRepository(private val settingsManager: SettingsManager) {
         imageBase64List: List<String>,
         systemPrompt: String,
         model: String = QwenApiService.MODEL_QWEN_VL_PLUS
-    ): QwenResult<String> = withContext(Dispatchers.IO) {
-        val auth = authHeader
-        if (auth.isNullOrBlank()) {
-            return@withContext QwenResult.Error("API Key 未配置")
-        }
-
-        // 构建图片内容部分
+    ): QwenResult<String> = executeApiCall("网络错误", { auth ->
         val imageParts = imageBase64List.map { base64 ->
-            QwenContentPart(
-                type = "image_url",
-                imageUrl = QwenImageUrl(url = "data:image/jpeg;base64,$base64")
-            )
+            QwenContentPart(type = "image_url", imageUrl = QwenImageUrl(url = "data:image/jpeg;base64,$base64"))
         }
-
-        // 构建文本部分
-        val textPart = QwenContentPart(type = "text", text = userPrompt)
-
-        // 组合所有内容
-        val userContent = imageParts + textPart
-
-        val request = QwenVLRequest(
+        val userContent = imageParts + QwenContentPart(type = "text", text = userPrompt)
+        apiService.vlCompletion(auth, QwenVLRequest(
             model = model,
             messages = listOf(
-                QwenVLMessage(
-                    role = "system",
-                    content = listOf(QwenContentPart(type = "text", text = systemPrompt))
-                ),
-                QwenVLMessage(
-                    role = "user",
-                    content = userContent
-                )
+                QwenVLMessage(role = "system", content = listOf(QwenContentPart(type = "text", text = systemPrompt))),
+                QwenVLMessage(role = "user", content = userContent)
             ),
             temperature = 0.7,
-            maxTokens = 4096  // 多帧可能需要更多 token
-        )
-
-        try {
-            val response = apiService.vlCompletion(auth, request)
-            if (response.isSuccessful && response.body() != null) {
-                val content = response.body()!!.choices.firstOrNull()?.message?.getTextContent()
-                if (content != null && content.isNotEmpty()) {
-                    QwenResult.Success(content)
-                } else {
-                    QwenResult.Error("响应内容为空")
-                }
-            } else {
-                val errorBody = response.errorBody()?.string()
-                QwenResult.Error("请求失败: ${response.code()} - $errorBody")
-            }
-        } catch (e: Exception) {
-            QwenResult.Error("网络错误: ${e.message}")
-        }
-    }
+            maxTokens = 4096
+        ))
+    }) { it }
 
     /**
      * 分析体态（通过多张图像）
@@ -328,41 +244,14 @@ class QwenRepository(private val settingsManager: SettingsManager) {
     suspend fun analyzeBodyImages(
         images: List<Pair<String, File>>,
         userStats: UserBodyStats
-    ): QwenResult<ParsedBodyAnalysis> = withContext(Dispatchers.IO) {
-        val auth = authHeader
-        if (auth.isNullOrBlank()) {
-            return@withContext QwenResult.Error("API Key 未配置")
+    ): QwenResult<ParsedBodyAnalysis> = executeApiCall("分析失败", { auth ->
+        val base64Images = images.mapNotNull { (type, file) ->
+            val base64 = encodeImageToBase64(file)
+            if (base64 != null) type to base64 else null
         }
-
-        try {
-            // 将所有图片转换为 Base64
-            val base64Images = images.mapNotNull { (type, file) ->
-                val base64 = encodeImageToBase64(file)
-                if (base64 != null) type to base64 else null
-            }
-
-            if (base64Images.isEmpty()) {
-                return@withContext QwenResult.Error("所有图片读取失败")
-            }
-
-            val request = QwenRequestBuilder.buildBodyAnalysisRequestMulti(base64Images, userStats)
-            val response = apiService.vlCompletion(auth, request)
-
-            if (response.isSuccessful && response.body() != null) {
-                val content = response.body()!!.choices.firstOrNull()?.message?.getTextContent()
-                if (content != null && content.isNotEmpty()) {
-                    QwenResult.Success(parseBodyAnalysisResponse(content))
-                } else {
-                    QwenResult.Error("响应内容为空")
-                }
-            } else {
-                val errorBody = response.errorBody()?.string()
-                QwenResult.Error("请求失败: ${response.code()} - $errorBody")
-            }
-        } catch (e: Exception) {
-            QwenResult.Error("分析失败: ${e.message}")
-        }
-    }
+        if (base64Images.isEmpty()) throw Exception("所有图片读取失败")
+        apiService.vlCompletion(auth, QwenRequestBuilder.buildBodyAnalysisRequestMulti(base64Images, userStats))
+    }, ::parseBodyAnalysisResponse)
 
     /**
      * 分析体态（通过图像）
@@ -372,37 +261,11 @@ class QwenRepository(private val settingsManager: SettingsManager) {
     suspend fun analyzeBodyImage(
         imageFile: File,
         userStats: UserBodyStats
-    ): QwenResult<ParsedBodyAnalysis> = withContext(Dispatchers.IO) {
-        val auth = authHeader
-        if (auth.isNullOrBlank()) {
-            return@withContext QwenResult.Error("API Key 未配置")
-        }
-
-        try {
-            // 将图片转换为 Base64
-            val base64 = encodeImageToBase64(imageFile)
-            if (base64 == null) {
-                return@withContext QwenResult.Error("图片读取失败")
-            }
-
-            val request = QwenRequestBuilder.buildBodyAnalysisRequest(base64, userStats)
-            val response = apiService.vlCompletion(auth, request)
-
-            if (response.isSuccessful && response.body() != null) {
-                val content = response.body()!!.choices.firstOrNull()?.message?.getTextContent()
-                if (content != null && content.isNotEmpty()) {
-                    QwenResult.Success(parseBodyAnalysisResponse(content))
-                } else {
-                    QwenResult.Error("响应内容为空")
-                }
-            } else {
-                val errorBody = response.errorBody()?.string()
-                QwenResult.Error("请求失败: ${response.code()} - $errorBody")
-            }
-        } catch (e: Exception) {
-            QwenResult.Error("分析失败: ${e.message}")
-        }
-    }
+    ): QwenResult<ParsedBodyAnalysis> = executeApiCall("分析失败", { auth ->
+        val base64 = encodeImageToBase64(imageFile)
+            ?: throw Exception("图片读取失败")
+        apiService.vlCompletion(auth, QwenRequestBuilder.buildBodyAnalysisRequest(base64, userStats))
+    }, ::parseBodyAnalysisResponse)
 
     /**
      * 分析体态（通过 Base64 图像数据）
@@ -410,31 +273,9 @@ class QwenRepository(private val settingsManager: SettingsManager) {
     suspend fun analyzeBodyBase64(
         imageBase64: String,
         userStats: UserBodyStats
-    ): QwenResult<ParsedBodyAnalysis> = withContext(Dispatchers.IO) {
-        val auth = authHeader
-        if (auth.isNullOrBlank()) {
-            return@withContext QwenResult.Error("API Key 未配置")
-        }
-
-        try {
-            val request = QwenRequestBuilder.buildBodyAnalysisRequest(imageBase64, userStats)
-            val response = apiService.vlCompletion(auth, request)
-
-            if (response.isSuccessful && response.body() != null) {
-                val content = response.body()!!.choices.firstOrNull()?.message?.getTextContent()
-                if (content != null && content.isNotEmpty()) {
-                    QwenResult.Success(parseBodyAnalysisResponse(content))
-                } else {
-                    QwenResult.Error("响应内容为空")
-                }
-            } else {
-                val errorBody = response.errorBody()?.string()
-                QwenResult.Error("请求失败: ${response.code()} - $errorBody")
-            }
-        } catch (e: Exception) {
-            QwenResult.Error("分析失败: ${e.message}")
-        }
-    }
+    ): QwenResult<ParsedBodyAnalysis> = executeApiCall("分析失败", { auth ->
+        apiService.vlCompletion(auth, QwenRequestBuilder.buildBodyAnalysisRequest(imageBase64, userStats))
+    }, ::parseBodyAnalysisResponse)
 
     /**
      * 生成健身计划
@@ -442,31 +283,9 @@ class QwenRepository(private val settingsManager: SettingsManager) {
     suspend fun generateWorkoutPlan(
         bodyAnalysis: BodyAnalysisResult,
         userStats: UserBodyStats
-    ): QwenResult<ParsedWorkoutPlan> = withContext(Dispatchers.IO) {
-        val auth = authHeader
-        if (auth.isNullOrBlank()) {
-            return@withContext QwenResult.Error("API Key 未配置")
-        }
-
-        try {
-            val request = QwenRequestBuilder.buildPlanGenerationRequest(bodyAnalysis, userStats)
-            val response = apiService.chatCompletion(auth, request)
-
-            if (response.isSuccessful && response.body() != null) {
-                val content = response.body()!!.choices.firstOrNull()?.message?.getTextContent()
-                if (content != null && content.isNotEmpty()) {
-                    QwenResult.Success(parseWorkoutPlanResponse(content))
-                } else {
-                    QwenResult.Error("响应内容为空")
-                }
-            } else {
-                val errorBody = response.errorBody()?.string()
-                QwenResult.Error("请求失败: ${response.code()} - $errorBody")
-            }
-        } catch (e: Exception) {
-            QwenResult.Error("生成计划失败: ${e.message}")
-        }
-    }
+    ): QwenResult<ParsedWorkoutPlan> = executeApiCall("生成计划失败", { auth ->
+        apiService.chatCompletion(auth, QwenRequestBuilder.buildPlanGenerationRequest(bodyAnalysis, userStats))
+    }, ::parseWorkoutPlanResponse)
 
     /**
      * 分析并建议计划调整
@@ -475,33 +294,9 @@ class QwenRepository(private val settingsManager: SettingsManager) {
         currentPlan: String,
         recentProgress: String,
         issues: String = ""
-    ): QwenResult<PlanAdjustment> = withContext(Dispatchers.IO) {
-        val auth = authHeader
-        if (auth.isNullOrBlank()) {
-            return@withContext QwenResult.Error("API Key 未配置")
-        }
-
-        try {
-            val request = QwenRequestBuilder.buildPlanAdjustmentRequest(
-                currentPlan, recentProgress, issues
-            )
-            val response = apiService.chatCompletion(auth, request)
-
-            if (response.isSuccessful && response.body() != null) {
-                val content = response.body()!!.choices.firstOrNull()?.message?.getTextContent()
-                if (content != null && content.isNotEmpty()) {
-                    QwenResult.Success(parsePlanAdjustmentResponse(content))
-                } else {
-                    QwenResult.Error("响应内容为空")
-                }
-            } else {
-                val errorBody = response.errorBody()?.string()
-                QwenResult.Error("请求失败: ${response.code()} - $errorBody")
-            }
-        } catch (e: Exception) {
-            QwenResult.Error("分析失败: ${e.message}")
-        }
-    }
+    ): QwenResult<PlanAdjustment> = executeApiCall("分析失败", { auth ->
+        apiService.chatCompletion(auth, QwenRequestBuilder.buildPlanAdjustmentRequest(currentPlan, recentProgress, issues))
+    }, ::parsePlanAdjustmentResponse)
 
     /**
      * 生成减载训练计划
@@ -509,20 +304,29 @@ class QwenRepository(private val settingsManager: SettingsManager) {
     suspend fun generateDeloadPlan(
         normalPlan: String,
         userStats: UserBodyStats
-    ): QwenResult<ParsedWorkoutPlan> = withContext(Dispatchers.IO) {
+    ): QwenResult<ParsedWorkoutPlan> = executeApiCall("生成减载计划失败", { auth ->
+        apiService.chatCompletion(auth, QwenRequestBuilder.buildDeloadPlanRequest(normalPlan, userStats))
+    }, ::parseWorkoutPlanResponse)
+
+    /**
+     * 通用 API 调用封装
+     * 统一处理 auth 检查、请求发送、响应解析和错误处理
+     */
+    private suspend fun <T> executeApiCall(
+        errorPrefix: String,
+        apiCall: suspend (String) -> Response<QwenChatResponse>,
+        transform: (String) -> T
+    ): QwenResult<T> = withContext(Dispatchers.IO) {
         val auth = authHeader
         if (auth.isNullOrBlank()) {
             return@withContext QwenResult.Error("API Key 未配置")
         }
-
         try {
-            val request = QwenRequestBuilder.buildDeloadPlanRequest(normalPlan, userStats)
-            val response = apiService.chatCompletion(auth, request)
-
+            val response = apiCall(auth)
             if (response.isSuccessful && response.body() != null) {
                 val content = response.body()!!.choices.firstOrNull()?.message?.getTextContent()
                 if (content != null && content.isNotEmpty()) {
-                    QwenResult.Success(parseWorkoutPlanResponse(content))
+                    QwenResult.Success(transform(content))
                 } else {
                     QwenResult.Error("响应内容为空")
                 }
@@ -531,7 +335,7 @@ class QwenRepository(private val settingsManager: SettingsManager) {
                 QwenResult.Error("请求失败: ${response.code()} - $errorBody")
             }
         } catch (e: Exception) {
-            QwenResult.Error("生成减载计划失败: ${e.message}")
+            QwenResult.Error("$errorPrefix: ${e.message}")
         }
     }
 
@@ -565,11 +369,11 @@ class QwenRepository(private val settingsManager: SettingsManager) {
             val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(imageFile.absolutePath, options)
 
-            // 2. 计算采样率
+            // 2. 计算采样率（inSampleSize 必须是 2 的幂）
             val (width, height) = options.outWidth to options.outHeight
+            val maxDim = maxOf(width, height)
             var inSampleSize = 1
-            while (width / inSampleSize > MAX_IMAGE_DIMENSION ||
-                   height / inSampleSize > MAX_IMAGE_DIMENSION) {
+            while (inSampleSize * 2 <= maxDim && maxDim / (inSampleSize * 2) >= MAX_IMAGE_DIMENSION) {
                 inSampleSize *= 2
             }
 

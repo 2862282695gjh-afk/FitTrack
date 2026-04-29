@@ -543,7 +543,7 @@ class FitTrackViewModel(
 
     // 获取计划的训练记录
     fun getRecordsForPlan(planId: Long): Flow<List<WorkoutRecord>> {
-        return repository.getRecordsForPlan(planId)
+        return repository.getRecordsByPlan(planId)
     }
 
     class Factory(

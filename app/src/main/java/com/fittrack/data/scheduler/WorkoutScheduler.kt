@@ -132,14 +132,19 @@ class WorkoutScheduler(private val context: Context) {
     }
 
     /**
-     * 获取今天的训练动作
+     * 获取今天的训练动作（支持多计划）
      */
     suspend fun getTodayExercises(): List<Exercise> {
         val todaySchedules = getTodaySchedule()
         if (todaySchedules.isEmpty()) return emptyList()
 
-        val planId = todaySchedules.first().planId
-        return exerciseDao.getExercisesByPlan(planId).first()
+        // 收集所有不同计划的今日动作
+        val planIds = todaySchedules.map { it.planId }.distinct()
+        val allExercises = mutableListOf<Exercise>()
+        for (planId in planIds) {
+            allExercises.addAll(exerciseDao.getExercisesByPlan(planId).first())
+        }
+        return allExercises
     }
 
     /**

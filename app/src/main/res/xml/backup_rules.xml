@@ -2,4 +2,7 @@
 <full-backup-content>
     <include domain="database" path="." />
     <include domain="sharedpref" path="." />
+    <!-- 排除加密存储和密钥材料 -->
+    <exclude domain="sharedpref" path="fittrack_secure_prefs" />
+    <exclude domain="sharedpref" path="fittrack_prefs" />
 </full-backup-content>
