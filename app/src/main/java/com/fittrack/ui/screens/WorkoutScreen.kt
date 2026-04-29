@@ -13,18 +13,26 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.fittrack.ui.navigation.STAGGER_DELAY
 import com.fittrack.ui.navigation.listItemEnter
+import com.fittrack.ui.viewmodel.ExerciseSessionData
 import com.fittrack.ui.viewmodel.FitTrackViewModel
+import com.fittrack.ui.viewmodel.SetRecord
 import com.fittrack.ui.viewmodel.WorkoutSession
 import kotlinx.coroutines.delay
 
@@ -121,7 +129,6 @@ fun WorkoutScreen(
                             )
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
-                                // 弹性数字动画
                                 val exerciseIndex by animateFloatAsState(
                                     targetValue = (workout.currentExerciseIndex + 1).toFloat(),
                                     animationSpec = ProgressSpring.animate,
@@ -147,106 +154,141 @@ fun WorkoutScreen(
 
                 // 当前动作
                 val currentExercise = workout.exercises.getOrNull(workout.currentExerciseIndex)
-                if (currentExercise != null) {
+                val exerciseData = currentExercise?.let { workout.exerciseSessionData[it.id] }
+                if (currentExercise != null && exerciseData != null) {
+                    // 动作信息卡片
                     item {
                         AnimatedVisibility(
                             visibleState = contentVisible,
                             enter = listItemEnter(delayMillis = STAGGER_DELAY)
                         ) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            Card(modifier = Modifier.fillMaxWidth()) {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text(
                                         currentExercise.name,
                                         style = MaterialTheme.typography.headlineSmall
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                        Text("目标: ${currentExercise.defaultSets}组 x ${currentExercise.defaultReps}次")
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                    ) {
+                                        Text("目标: ${exerciseData.setRecords.size}组 x ${currentExercise.defaultReps}次")
                                         if (currentExercise.defaultWeight > 0) {
                                             Text("${currentExercise.defaultWeight}kg")
                                         }
+                                        Text("间歇: ${exerciseData.restSeconds}s")
                                     }
                                 }
                             }
                         }
                     }
 
-                    // 记录输入
+                    // 组间歇计时器
+                    if (exerciseData.isResting) {
+                        item {
+                            RestTimerCard(
+                                remaining = exerciseData.restTimerRemaining,
+                                total = exerciseData.restSeconds,
+                                onSkip = { viewModel.skipRest() }
+                            )
+                        }
+                    }
+
+                    // 逐组记录列表
                     item {
                         AnimatedVisibility(
                             visibleState = contentVisible,
                             enter = listItemEnter(delayMillis = STAGGER_DELAY * 2)
                         ) {
-                            var sets by remember { mutableStateOf(currentExercise.defaultSets.toString()) }
-                            var reps by remember { mutableStateOf("") }
-                            var weights by remember { mutableStateOf("") }
-
-                            Card(
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
+                            Card(modifier = Modifier.fillMaxWidth()) {
                                 Column(
                                     modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text("记录本次训练", style = MaterialTheme.typography.titleMedium)
+                                    Text("记录", style = MaterialTheme.typography.titleMedium)
 
-                                    OutlinedTextField(
-                                        value = sets,
-                                        onValueChange = { sets = it.filter { c -> c.isDigit() } },
-                                        label = { Text("完成组数") },
+                                    // 表头
+                                    Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        singleLine = true
-                                    )
-
-                                    OutlinedTextField(
-                                        value = reps,
-                                        onValueChange = { reps = it },
-                                        label = { Text("每组次数 (用逗号分隔)") },
-                                        placeholder = { Text("如: 10,10,8") },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        singleLine = true
-                                    )
-
-                                    OutlinedTextField(
-                                        value = weights,
-                                        onValueChange = { weights = it },
-                                        label = { Text("每组重量 (用逗号分隔)") },
-                                        placeholder = { Text("如: 60,65,70") },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        singleLine = true
-                                    )
-
-                                    // 带弹性缩放的保存按钮
-                                    val saveInteraction = remember { MutableInteractionSource() }
-                                    val savePressed by saveInteraction.collectIsPressedAsState()
-                                    val saveScale by animateFloatAsState(
-                                        targetValue = if (savePressed) 0.95f else 1f,
-                                        animationSpec = ButtonSpring.press,
-                                        label = "saveScale"
-                                    )
-
-                                    Button(
-                                        onClick = {
-                                            viewModel.updateExerciseRecord(
-                                                exerciseId = currentExercise.id,
-                                                sets = sets.toIntOrNull() ?: 0,
-                                                reps = reps,
-                                                weights = weights
-                                            )
-                                            if (workout.currentExerciseIndex < workout.exercises.size - 1) {
-                                                viewModel.nextExercise()
-                                            } else {
-                                                showFinishDialog = true
-                                            }
-                                        },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .scale(saveScale),
-                                        interactionSource = saveInteraction
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Text(if (workout.currentExerciseIndex < workout.exercises.size - 1) "保存并继续" else "完成训练")
+                                        Text(
+                                            "组",
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            "次数",
+                                            modifier = Modifier.weight(2f),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Text(
+                                            "重量(kg)",
+                                            modifier = Modifier.weight(2f),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        Text(
+                                            "",
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+
+                                    HorizontalDivider()
+
+                                    // 每组一行
+                                    exerciseData.setRecords.forEachIndexed { index, setRecord ->
+                                        SetRow(
+                                            setNumber = index + 1,
+                                            setRecord = setRecord,
+                                            isCurrentSet = index == exerciseData.currentSetIndex && !exerciseData.isResting,
+                                            isEditable = index == exerciseData.currentSetIndex,
+                                            onRepsChange = { viewModel.updateSetRecord(currentExercise.id, index, it, setRecord.weight) },
+                                            onWeightChange = { viewModel.updateSetRecord(currentExercise.id, index, setRecord.reps, it) },
+                                            onComplete = { viewModel.completeCurrentSet(currentExercise.id) }
+                                        )
+                                        if (index < exerciseData.setRecords.lastIndex) {
+                                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // 全部完成 → 下一个动作 / 完成训练
+                                    val allCompleted = exerciseData.setRecords.all { it.completed }
+                                    if (allCompleted) {
+                                        val saveInteraction = remember { MutableInteractionSource() }
+                                        val savePressed by saveInteraction.collectIsPressedAsState()
+                                        val saveScale by animateFloatAsState(
+                                            targetValue = if (savePressed) 0.95f else 1f,
+                                            animationSpec = ButtonSpring.press,
+                                            label = "saveScale"
+                                        )
+                                        Button(
+                                            onClick = {
+                                                if (workout.currentExerciseIndex < workout.exercises.size - 1) {
+                                                    viewModel.nextExercise()
+                                                } else {
+                                                    showFinishDialog = true
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .scale(saveScale),
+                                            interactionSource = saveInteraction
+                                        ) {
+                                            Text(
+                                                if (workout.currentExerciseIndex < workout.exercises.size - 1)
+                                                    "下一个动作"
+                                                else
+                                                    "完成训练"
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -323,7 +365,6 @@ fun WorkoutScreen(
             onDismissRequest = { showFinishDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // 庆祝图标弹性动画
                     val celebScale by animateFloatAsState(
                         targetValue = if (dialogVisible) 1f else 0f,
                         animationSpec = CelebratorySpring.bounce,
@@ -347,7 +388,6 @@ fun WorkoutScreen(
                 ) {
                     Text("今天的训练感觉如何？")
 
-                    // 感受评分
                     StarRatingRow(
                         currentRating = workoutFeeling,
                         onRatingChange = { workoutFeeling = it }
@@ -418,6 +458,162 @@ fun WorkoutScreen(
                 }
             }
         )
+    }
+}
+
+// ========== 子组件 ==========
+
+/**
+ * 组间歇倒计时卡片
+ */
+@Composable
+private fun RestTimerCard(
+    remaining: Int,
+    total: Int,
+    onSkip: () -> Unit
+) {
+    val minutes = remaining / 60
+    val seconds = remaining % 60
+    val progress = if (total > 0) 1f - remaining.toFloat() / total else 0f
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "组间休息",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "%02d:%02d".format(minutes, seconds),
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp
+                ),
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.small),
+                color = MaterialTheme.colorScheme.tertiary,
+                trackColor = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.1f)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            TextButton(onClick = onSkip) {
+                Text("跳过休息")
+            }
+        }
+    }
+}
+
+/**
+ * 单组记录行
+ */
+@Composable
+private fun RowScope.SetRow(
+    setNumber: Int,
+    setRecord: SetRecord,
+    isCurrentSet: Boolean,
+    isEditable: Boolean,
+    onRepsChange: (Int) -> Unit,
+    onWeightChange: (Double) -> Unit,
+    onComplete: () -> Unit
+) {
+    // 组号
+    Text(
+        text = if (setRecord.completed) "✓ $setNumber" else "$setNumber",
+        modifier = Modifier.weight(1f),
+        style = MaterialTheme.typography.bodyLarge,
+        color = if (setRecord.completed)
+            MaterialTheme.colorScheme.primary
+        else if (isCurrentSet)
+            MaterialTheme.colorScheme.onSurface
+        else
+            MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
+    // 次数
+    OutlinedTextField(
+        value = if (setRecord.reps > 0) setRecord.reps.toString() else "",
+        onValueChange = { text ->
+            if (isEditable) {
+                onRepsChange(text.filter { it.isDigit() }.toIntOrNull() ?: 0)
+            }
+        },
+        modifier = Modifier.weight(2f),
+        singleLine = true,
+        readOnly = !isEditable,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        textStyle = MaterialTheme.typography.bodyLarge,
+        colors = OutlinedTextFieldDefaults.colors(
+            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+            disabledBorderColor = MaterialTheme.colorScheme.outline
+        )
+    )
+
+    // 重量
+    OutlinedTextField(
+        value = if (setRecord.weight > 0) setRecord.weight.toString() else "",
+        onValueChange = { text ->
+            if (isEditable) {
+                onWeightChange(text.filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0)
+            }
+        },
+        modifier = Modifier.weight(2f),
+        singleLine = true,
+        readOnly = !isEditable,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        textStyle = MaterialTheme.typography.bodyLarge,
+        colors = OutlinedTextFieldDefaults.colors(
+            disabledTextColor = MaterialTheme.colorScheme.onSurface,
+            disabledBorderColor = MaterialTheme.colorScheme.outline
+        )
+    )
+
+    // 完成 / 已完成状态
+    if (setRecord.completed) {
+        Icon(
+            Icons.Default.CheckCircle,
+            contentDescription = null,
+            modifier = Modifier
+                .weight(1f)
+                .size(28.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+    } else if (isEditable) {
+        val btnInteraction = remember { MutableInteractionSource() }
+        val btnPressed by btnInteraction.collectIsPressedAsState()
+        val btnScale by animateFloatAsState(
+            targetValue = if (btnPressed) 0.9f else 1f,
+            animationSpec = ButtonSpring.press,
+            label = "setCompleteScale$setNumber"
+        )
+        IconButton(
+            onClick = onComplete,
+            modifier = Modifier
+                .weight(1f)
+                .scale(btnScale),
+            interactionSource = btnInteraction
+        ) {
+            Icon(
+                Icons.Default.Check,
+                contentDescription = "完成第${setNumber}组",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    } else {
+        Spacer(modifier = Modifier.weight(1f))
     }
 }
 
