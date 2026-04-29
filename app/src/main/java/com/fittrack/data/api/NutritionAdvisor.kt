@@ -236,7 +236,7 @@ class NutritionAdvisor(private val qwenRepository: QwenRepository) {
         sb.appendLine()
         sb.appendLine("## 营养目标")
         sb.appendLine("- 每日目标热量：${dailyTarget.toInt()} kcal")
-        sb.appendLine("- 本餐(${mealText)占比：${(mealRatio * 100).toInt()}%")
+        sb.appendLine("- 本餐(${mealText})占比：${(mealRatio * 100).toInt()}%")
         sb.appendLine("- 本餐目标热量：${mealTargetCalories.toInt()} kcal")
         if (request.alreadyEatenCalories > 0) {
             sb.appendLine("- 今日已摄入：${request.alreadyEatenCalories.toInt()} kcal")

@@ -567,7 +567,10 @@ private fun RowScope.SetRow(
         value = if (setRecord.weight > 0) setRecord.weight.toString() else "",
         onValueChange = { text ->
             if (isEditable) {
-                onWeightChange(text.filter { it.isDigit() || it == '.' }.toDoubleOrNull() ?: 0.0)
+                val filtered = text.filter { it.isDigit() || it == '.' }
+                if (filtered.count { it == '.' } <= 1) {
+                    onWeightChange(filtered.toDoubleOrNull() ?: 0.0)
+                }
             }
         },
         modifier = Modifier.weight(2f),

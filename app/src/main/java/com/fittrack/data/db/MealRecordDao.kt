@@ -25,7 +25,7 @@ interface MealRecordDao {
     @Query("SELECT COALESCE(SUM(totalCalories), 0) FROM meal_records WHERE date = :date")
     suspend fun getTotalCaloriesByDate(date: String): Double
 
-    @Query("SELECT COALESCE(SUM(totalProtein), 0), COALESCE(SUM(totalCarbs), 0), COALESCE(SUM(totalFat), 0), COALESCE(SUM(totalCalories), 0) FROM meal_records WHERE date = :date")
+    @Query("SELECT COALESCE(SUM(totalProtein), 0) AS totalProtein, COALESCE(SUM(totalCarbs), 0) AS totalCarbs, COALESCE(SUM(totalFat), 0) AS totalFat, COALESCE(SUM(totalCalories), 0) AS totalCalories FROM meal_records WHERE date = :date")
     suspend fun getDailyNutritionSummary(date: String): DailyNutritionSummary
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

@@ -266,6 +266,11 @@ abstract class FitTrackDatabase : RoomDatabase() {
         }
 
         /**
+         * 数据库迁移：版本 8 -> 9
+         * 添加饮食记录表（meal_records）和营养推荐表（nutrition_advices）
+         *
+         * 回滚方案：DROP TABLE meal_records; DROP TABLE nutrition_advices;
+         */
         private val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""

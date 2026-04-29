@@ -43,13 +43,6 @@ data class WorkoutSession(
     val startTime: Long = System.currentTimeMillis()
 )
 
-/** @deprecated 使用 ExerciseSessionData 代替 */
-data class ExerciseRecordData(
-    val sets: Int = 0,
-    val reps: String = "",
-    val weights: String = ""
-)
-
 class FitTrackViewModel(
     val repository: FitTrackRepository,
     private val qwenRepository: QwenRepository? = null
@@ -270,11 +263,11 @@ class FitTrackViewModel(
         restTimerJob?.cancel()
         restTimerJob = null
         _workoutSession.value?.let { session ->
-            val updatedMap = session.exerciseSessionData.mapValues { (_, data) ->
-                if (data.isResting) {
-                    data.copy(isResting = false, restTimerRemaining = 0)
-                } else data
-            }
+            val exerciseId = session.exercises.getOrNull(session.currentExerciseIndex)?.id ?: return
+            val data = session.exerciseSessionData[exerciseId] ?: return
+            if (!data.isResting) return
+            val updatedMap = session.exerciseSessionData.toMutableMap()
+            updatedMap[exerciseId] = data.copy(isResting = false, restTimerRemaining = 0)
             _workoutSession.value = session.copy(exerciseSessionData = updatedMap)
         }
     }
@@ -285,17 +278,16 @@ class FitTrackViewModel(
         restTimerJob = viewModelScope.launch {
             var remaining = totalSeconds
             while (remaining > 0) {
-                kotlinx.coroutines.delay(1000L)
-                remaining--
+                // 先更新 UI 显示当前剩余秒数，再等待
                 _workoutSession.value?.let { session ->
                     val data = session.exerciseSessionData[exerciseId] ?: return@let
-                    if (!data.isResting) { // 被跳过了
-                        return@launch
-                    }
+                    if (!data.isResting) return@launch
                     val updatedMap = session.exerciseSessionData.toMutableMap()
                     updatedMap[exerciseId] = data.copy(restTimerRemaining = remaining)
                     _workoutSession.value = session.copy(exerciseSessionData = updatedMap)
                 }
+                kotlinx.coroutines.delay(1000L)
+                remaining--
             }
             // 倒计时结束，清除 resting 状态
             _workoutSession.value?.let { session ->
@@ -307,26 +299,6 @@ class FitTrackViewModel(
         }
     }
 
-    // ========== 兼容旧接口 ==========
-
-    /** @deprecated 使用逐组 API 代替 */
-    fun updateExerciseRecord(exerciseId: Long, sets: Int, reps: String, weights: String) {
-        _workoutSession.value?.let { session ->
-            val updatedMap = session.exerciseSessionData.toMutableMap()
-            val data = updatedMap[exerciseId] ?: ExerciseSessionData()
-            val repList = reps.split(",").mapNotNull { it.trim().toIntOrNull() }
-            val weightList = weights.split(",").mapNotNull { it.trim().toDoubleOrNull() }
-            val setRecords = (0 until sets.coerceAtLeast(repList.size, weightList.size)).map { i ->
-                SetRecord(
-                    reps = repList.getOrElse(i) { 0 },
-                    weight = weightList.getOrElse(i) { 0.0 },
-                    completed = true
-                )
-            }
-            updatedMap[exerciseId] = data.copy(setRecords = setRecords, currentSetIndex = setRecords.size.coerceAtMost(1) - 1)
-            _workoutSession.value = session.copy(exerciseSessionData = updatedMap)
-        }
-    }
 
     // 下一个动作
     fun nextExercise() {
@@ -377,14 +349,14 @@ class FitTrackViewModel(
                 val currentExerciseRecords = mutableListOf<ExerciseRecord>()
                 session.exercises.forEach { exercise ->
                     val sessionData = session.exerciseSessionData[exercise.id]
-                    val completedSets = sessionData?.setRecords?.filter { it.completed } ?: emptyList()
+                    val allSets = sessionData?.setRecords ?: emptyList()
                     val exerciseRecord = ExerciseRecord(
                         recordId = 0L, // 临时ID，插入后会更新
                         exerciseId = exercise.id,
                         exerciseName = exercise.name,
-                        sets = completedSets.size,
-                        reps = completedSets.joinToString(",") { it.reps.toString() },
-                        weights = completedSets.joinToString(",") { it.weight.toString() }
+                        sets = allSets.size,
+                        reps = allSets.joinToString(",") { it.reps.toString() },
+                        weights = allSets.joinToString(",") { it.weight.toString() }
                     )
                     currentExerciseRecords.add(exerciseRecord)
                 }
