@@ -521,7 +521,7 @@ private fun RestTimerCard(
  * 单组记录行
  */
 @Composable
-private fun RowScope.SetRow(
+private fun SetRow(
     setNumber: Int,
     setRecord: SetRecord,
     isCurrentSet: Boolean,
@@ -530,6 +530,7 @@ private fun RowScope.SetRow(
     onWeightChange: (Double) -> Unit,
     onComplete: () -> Unit
 ) {
+    Row(modifier = Modifier.fillMaxWidth()) {
     // 组号
     Text(
         text = if (setRecord.completed) "✓ $setNumber" else "$setNumber",
@@ -617,6 +618,7 @@ private fun RowScope.SetRow(
         }
     } else {
         Spacer(modifier = Modifier.weight(1f))
+    }
     }
 }
 
