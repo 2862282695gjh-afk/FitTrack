@@ -6,7 +6,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.*
 import com.fittrack.ui.navigation.IconSpring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -28,6 +28,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -477,29 +478,60 @@ fun MessageBubble(
                     )
                     .background(
                         if (isUser) {
-                            MaterialTheme.colorScheme.primary
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    com.fittrack.ui.theme.FitGreen,
+                                    com.fittrack.ui.theme.FitGreenGlow
+                                )
+                            )
                         } else {
-                            MaterialTheme.colorScheme.surfaceVariant
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            )
                         }
                     )
                     .padding(12.dp)
             ) {
                 if (message.isLoading && message.content.isBlank()) {
-                    // 正在等待响应，显示加载指示器
+                    // Lovable 风格：三个跳动圆点
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = if (isUser) Color.White else MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "正在思考中...",
-                            color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                            fontSize = 14.sp
-                        )
+                        repeat(3) { index ->
+                            val dotTransition = rememberInfiniteTransition(label = "dot$index")
+                            val dotOffset by dotTransition.animateFloat(
+                                initialValue = 0f,
+                                targetValue = -6f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(600, delayMillis = index * 200, easing = FastOutSlowInEasing),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "dotOffset$index"
+                            )
+                            val dotAlpha by dotTransition.animateFloat(
+                                initialValue = 0.4f,
+                                targetValue = 1f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(600, delayMillis = index * 200),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "dotAlpha$index"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .offset(y = dotOffset.dp)
+                                    .alpha(dotAlpha)
+                                    .background(
+                                        color = if (isUser) Color.White else MaterialTheme.colorScheme.primary,
+                                        shape = CircleShape
+                                    )
+                            )
+                        }
                     }
                 } else {
                     // 有内容时使用 Markdown 富文本渲染（包括流式输出）
