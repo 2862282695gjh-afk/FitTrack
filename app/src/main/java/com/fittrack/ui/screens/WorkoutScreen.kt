@@ -3,11 +3,14 @@ package com.fittrack.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import com.fittrack.ui.navigation.ButtonSpring
 import com.fittrack.ui.navigation.IconSpring
 import com.fittrack.ui.navigation.CelebratorySpring
 import com.fittrack.ui.navigation.ProgressSpring
+import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -28,6 +31,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.fittrack.ui.components.AchievementBadge
+import com.fittrack.ui.components.BouncyButton
+import com.fittrack.ui.components.ConfettiEffect
 import com.fittrack.ui.navigation.STAGGER_DELAY
 import com.fittrack.ui.navigation.listItemEnter
 import com.fittrack.ui.viewmodel.ExerciseSessionData
@@ -348,116 +354,153 @@ fun WorkoutScreen(
         }
     }
 
-    // 完成训练对话框 — 带庆祝缩放动画
+    // 完成训练全屏庆祝页 —— Duolingo 风格
     if (showFinishDialog) {
-        var dialogVisible by remember { mutableStateOf(false) }
-        val dialogAnimScale = remember { Animatable(0.5f) }
+        var visible by remember { mutableStateOf(false) }
+        val scaleAnim = remember { Animatable(0.3f) }
+        val earnedXp = remember { (50..150).random() }
 
         LaunchedEffect(Unit) {
-            dialogVisible = true
-            dialogAnimScale.animateTo(
+            visible = true
+            scaleAnim.animateTo(
                 targetValue = 1f,
-                animationSpec = CelebratorySpring.bounce
+                animationSpec = spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMedium)
             )
         }
 
-        AlertDialog(
-            onDismissRequest = { showFinishDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val celebScale by animateFloatAsState(
-                        targetValue = if (dialogVisible) 1f else 0f,
-                        animationSpec = CelebratorySpring.bounce,
-                        label = "celebScale"
-                    )
-                    Icon(
-                        Icons.Default.EmojiEvents,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .scale(celebScale),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("训练完成!")
-                }
-            },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Text("今天的训练感觉如何？")
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.97f))
+        ) {
+            ConfettiEffect(active = visible)
 
-                    StarRatingRow(
-                        currentRating = workoutFeeling,
-                        onRatingChange = { workoutFeeling = it }
-                    )
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically)
+            ) {
+                item {
                     Text(
-                        text = "训练感受",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
-
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    Text("睡眠质量 (1=很差, 5=很好)", style = MaterialTheme.typography.bodySmall)
-                    StarRatingRow(
-                        currentRating = sleepQuality,
-                        onRatingChange = { sleepQuality = it }
-                    )
-
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    Text("食欲 (1=很差, 5=很好)", style = MaterialTheme.typography.bodySmall)
-                    StarRatingRow(
-                        currentRating = appetite,
-                        onRatingChange = { appetite = it }
-                    )
-
-                    Divider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    Text("能量水平 (1=很差, 5=很好)", style = MaterialTheme.typography.bodySmall)
-                    StarRatingRow(
-                        currentRating = energyLevel,
-                        onRatingChange = { energyLevel = it }
-                    )
-
-                    OutlinedTextField(
-                        value = workoutNotes,
-                        onValueChange = { workoutNotes = it },
-                        label = { Text("训练笔记（可选）") },
-                        placeholder = { Text("记录一下今天的训练感受") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        maxLines = 5
+                        text = "🎉",
+                        style = MaterialTheme.typography.displayLarge,
+                        modifier = Modifier.scale(scaleAnim.value)
                     )
                 }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.finishWorkout(
-                            workoutFeeling,
-                            workoutNotes,
-                            sleepQuality,
-                            appetite,
-                            energyLevel
+
+                item {
+                    Text(
+                        text = "训练完成！",
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    )
+                }
+
+                item {
+                    AchievementBadge(
+                        emoji = "⭐",
+                        title = "获得 $earnedXp 经验值",
+                        description = "完成一次训练",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.large,
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            onWorkoutComplete()
+                            Text(
+                                "今天的训练感觉如何？",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+
+                            StarRatingRow(
+                                currentRating = workoutFeeling,
+                                onRatingChange = { workoutFeeling = it }
+                            )
+
+                            HorizontalDivider()
+
+                            Text("睡眠质量", style = MaterialTheme.typography.labelLarge)
+                            StarRatingRow(
+                                currentRating = sleepQuality,
+                                onRatingChange = { sleepQuality = it }
+                            )
+
+                            Text("食欲", style = MaterialTheme.typography.labelLarge)
+                            StarRatingRow(
+                                currentRating = appetite,
+                                onRatingChange = { appetite = it }
+                            )
+
+                            Text("能量水平", style = MaterialTheme.typography.labelLarge)
+                            StarRatingRow(
+                                currentRating = energyLevel,
+                                onRatingChange = { energyLevel = it }
+                            )
+
+                            OutlinedTextField(
+                                value = workoutNotes,
+                                onValueChange = { workoutNotes = it },
+                                label = { Text("训练笔记（可选）") },
+                                placeholder = { Text("记录一下今天的训练感受") },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2,
+                                maxLines = 4,
+                                shape = MaterialTheme.shapes.medium
+                            )
                         }
                     }
-                ) {
-                    Text("保存")
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showFinishDialog = false }) {
-                    Text("继续训练")
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { showFinishDialog = false },
+                            modifier = Modifier.weight(1f),
+                            shape = MaterialTheme.shapes.large
+                        ) {
+                            Text("继续训练")
+                        }
+                        BouncyButton(
+                            onClick = {
+                                viewModel.finishWorkout(
+                                    workoutFeeling,
+                                    workoutNotes,
+                                    sleepQuality,
+                                    appetite,
+                                    energyLevel
+                                ) {
+                                    onWorkoutComplete()
+                                }
+                            },
+                            modifier = Modifier.weight(1.5f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text("保存记录")
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 }
 

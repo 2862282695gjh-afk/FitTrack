@@ -1,5 +1,6 @@
 package com.fittrack.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,11 +10,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fittrack.data.entity.Exercise
 import com.fittrack.data.entity.WorkoutPlan
+import com.fittrack.ui.components.GoalChip
+import com.fittrack.ui.components.getGoalLabel
 import com.fittrack.ui.viewmodel.FitTrackViewModel
 import kotlinx.coroutines.launch
 
@@ -48,15 +52,22 @@ fun PlanDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(selectedPlan?.name ?: "计划详情") },
+                title = {
+                    Text(
+                        text = selectedPlan?.name ?: "计划详情",
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
         },
@@ -76,29 +87,38 @@ fun PlanDetailScreen(
             ) {
                 // 计划信息
                 item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
+                    com.fittrack.ui.components.AccentCard(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column {
                             if (currentPlan.description.isNotEmpty()) {
                                 Text(
                                     currentPlan.description,
-                                    style = MaterialTheme.typography.bodyLarge
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = FontWeight.Medium
+                                    )
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                SuggestionChip(
-                                    onClick = { },
-                                    label = { Text(getGoalLabel(currentPlan.goal)) }
-                                )
-                                SuggestionChip(
-                                    onClick = { },
-                                    label = { Text("${currentPlan.cycleDays}天周期") }
-                                )
+                                GoalChip(label = getGoalLabel(currentPlan.goal))
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            color = com.fittrack.ui.theme.FitBlue.copy(alpha = 0.12f),
+                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(50)
+                                        )
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        "${currentPlan.cycleDays}天周期",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            color = com.fittrack.ui.theme.FitBlue,
+                                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                                        )
+                                    )
+                                }
                             }
                         }
                     }
@@ -106,17 +126,14 @@ fun PlanDetailScreen(
 
                 // 开始训练按钮
                 item {
-                    Button(
+                    com.fittrack.ui.components.GradientCtaButton(
+                        text = "开始训练",
                         onClick = {
                             viewModel.startWorkout(currentPlan)
                             onStartWorkout()
                         },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("开始训练")
-                    }
+                        icon = Icons.Default.PlayArrow
+                    )
                 }
 
                 // 动作列表标题
@@ -132,8 +149,10 @@ fun PlanDetailScreen(
                         )
                         Text(
                             "${exercises.size} 个动作",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
                         )
                     }
                 }
