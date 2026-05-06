@@ -337,13 +337,13 @@ class FitTrackViewModel(
         restTimerJob?.cancel()
         restTimerJob = null
 
-        // 立即清除 session，UI 马上退出训练界面
+        // 先取出 session 再清除，防止后续读写冲突
         val session = _workoutSession.value ?: run { isFinishing = false; return }
         _workoutSession.value = null
-        onComplete()
 
-        // 后台生成 AI 总结 + 保存记录（不阻塞 UI）
+        // 异步保存：先写库，成功后再导航
         viewModelScope.launch {
+            try {
             val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             val today = sdf.format(Date())
 
@@ -435,7 +435,13 @@ class FitTrackViewModel(
                 repository.insertExerciseRecord(recordWithId)
             }
 
-            isFinishing = false
+            // 数据库写入成功后才导航
+            onComplete()
+            } catch (e: Exception) {
+                Log.e("FitTrackViewModel", "保存训练记录失败", e)
+            } finally {
+                isFinishing = false
+            }
         }
     }
 
