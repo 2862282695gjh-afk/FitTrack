@@ -3,7 +3,6 @@ package com.fittrack.ui.navigation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -66,16 +65,8 @@ fun FitTrackNavHost(
     val viewModel: FitTrackViewModel = viewModel(factory = FitTrackViewModel.Factory(repository, qwenRepository))
 
     val isConfigured by settingsViewModel.isConfigured.collectAsState()
-    val startDestination = remember { Screen.Onboarding.route }
-
-    // 监听配置状态变化，自动导航
-    LaunchedEffect(isConfigured) {
-        if (isConfigured && navController.currentDestination?.route == Screen.Onboarding.route) {
-            navController.navigate(Screen.Home.route) {
-                popUpTo(Screen.Onboarding.route) { inclusive = true }
-            }
-        }
-    }
+    // 已配置则直接进主页，避免 Onboarding → Home 双重导航
+    val startDestination = if (isConfigured) Screen.Home.route else Screen.Onboarding.route
 
     // 当前路由 & 底部导航显隐控制
     val navBackStackEntry by navController.currentBackStackEntryAsState()

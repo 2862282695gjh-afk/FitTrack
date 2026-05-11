@@ -54,13 +54,14 @@ class FitTrackApplication : Application() {
         }
 
         // 延迟调度小部件更新任务（等待数据库初始化完成）
-        Handler(Looper.getMainLooper()).postDelayed({
+        // 使用协程避免阻塞主线程，增加异常隔离
+        Thread {
             try {
+                Thread.sleep(2000)
                 scheduleWidgetUpdate(this)
             } catch (e: Throwable) {
-                e.printStackTrace()
                 // 小部件更新失败不影响应用正常运行
             }
-        }, 2000)
+        }.start()
     }
 }
