@@ -3,6 +3,7 @@ package com.fittrack
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import android.widget.Toast
 import com.fittrack.reminder.ReminderManager
 import com.fittrack.widget.scheduleWidgetUpdate
 import java.io.File
@@ -13,6 +14,7 @@ class FitTrackApplication : Application() {
 
     private val crashHandler = Thread.UncaughtExceptionHandler { thread, throwable ->
         // 捕获并记录崩溃
+        val stackTrace = throwable.stackTraceToString()
         throwable.printStackTrace()
 
         // 写入崩溃日志文件
@@ -20,18 +22,26 @@ class FitTrackApplication : Application() {
             val crashLog = File(filesDir, "crash_log.txt")
             FileWriter(crashLog, true).use { writer ->
                 writer.appendLine("=== Crash ${System.currentTimeMillis()} ===")
-                writer.appendLine(throwable.stackTraceToString())
+                writer.appendLine(stackTrace)
                 writer.appendLine()
             }
         } catch (_: Throwable) {}
 
         // 如果是小部件相关的崩溃，不影响应用启动
-        if (throwable is RuntimeException && throwable.stackTraceToString().contains("widget")) {
-            // 静默处理，不影响应用正常启动
+        if (throwable is RuntimeException && stackTrace.contains("widget")) {
             return@UncaughtExceptionHandler
         }
 
-        // 其他崩溃交给默认处理
+        // 在主线程弹出 Toast 显示崩溃信息（方便无 adb 排查）
+        Handler(Looper.getMainLooper()).post {
+            try {
+                val shortMsg = stackTrace.lines().firstOrNull { it.contains("Exception") || it.contains("Error") }
+                    ?.take(200) ?: throwable.javaClass.simpleName
+                Toast.makeText(this, "崩溃: $shortMsg", Toast.LENGTH_LONG).show()
+            } catch (_: Throwable) {}
+        }
+
+        // 交给默认处理
         defaultHandler?.uncaughtException(thread, throwable) ?: run {
             exitProcess(1)
         }
