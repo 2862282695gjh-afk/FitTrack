@@ -5,6 +5,8 @@ import android.os.Handler
 import android.os.Looper
 import com.fittrack.reminder.ReminderManager
 import com.fittrack.widget.scheduleWidgetUpdate
+import java.io.File
+import java.io.FileWriter
 import kotlin.system.exitProcess
 
 class FitTrackApplication : Application() {
@@ -12,6 +14,16 @@ class FitTrackApplication : Application() {
     private val crashHandler = Thread.UncaughtExceptionHandler { thread, throwable ->
         // 捕获并记录崩溃
         throwable.printStackTrace()
+
+        // 写入崩溃日志文件
+        try {
+            val crashLog = File(filesDir, "crash_log.txt")
+            FileWriter(crashLog, true).use { writer ->
+                writer.appendLine("=== Crash ${System.currentTimeMillis()} ===")
+                writer.appendLine(throwable.stackTraceToString())
+                writer.appendLine()
+            }
+        } catch (_: Throwable) {}
 
         // 如果是小部件相关的崩溃，不影响应用启动
         if (throwable is RuntimeException && throwable.stackTraceToString().contains("widget")) {
@@ -45,7 +57,7 @@ class FitTrackApplication : Application() {
         Handler(Looper.getMainLooper()).postDelayed({
             try {
                 scheduleWidgetUpdate(this)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
                 // 小部件更新失败不影响应用正常运行
             }
